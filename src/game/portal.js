@@ -76,17 +76,68 @@ export const dimSpawn = new Array(DIM_N).fill(null);
 export const dimVisited = new Array(DIM_N).fill(false);
 
 
-/* 玩家 AABB 里有没有门方块 —— 有就是「站进传送门了」 */
-export function portalIdInPlayer() {
-  const p = player;
-  const x0 = Math.floor(p.x - PW), x1 = Math.floor(p.x + PW - 1e-6);
-  const y0 = Math.floor(p.y),      y1 = Math.floor(p.y + 1.8 - 1e-6);
-  const z0 = Math.floor(p.z - PW), z1 = Math.floor(p.z + PW - 1e-6);
-  for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) {
-    const id = getEffective(x, y, z);
+/* 以 (x,y,z) 为中心的玩家 AABB 里有没有门方块 —— 有就是「站进传送门了」。
+ * 做成可传坐标的形式，落点检查（见下）要拿同一套判定去试候选点。 */
+function portalIdInBox(x, y, z) {
+  const x0 = Math.floor(x - PW), x1 = Math.floor(x + PW - 1e-6);
+  const y0 = Math.floor(y),      y1 = Math.floor(y + 1.8 - 1e-6);
+  const z0 = Math.floor(z - PW), z1 = Math.floor(z + PW - 1e-6);
+  for (let yy = y0; yy <= y1; yy++) for (let zz = z0; zz <= z1; zz++) for (let xx = x0; xx <= x1; xx++) {
+    const id = getEffective(xx, yy, zz);
     if (isPortalBlock(id)) return id;
   }
   return 0;
+}
+
+export function portalIdInPlayer() {
+  return portalIdInBox(player.x, player.y, player.z);
+}
+
+/* 这一格站不站得住：脚到头的整段都不是实心，且脚下一格是实地。 */
+function standable(x, y, z) {
+  const bx = Math.floor(x), bz = Math.floor(z);
+  const f = Math.floor(y), head = Math.floor(y + 1.8 - 1e-6);
+  for (let yy = f; yy <= head; yy++) if (isSolid(getEffective(bx, yy, bz))) return false;
+  return isSolid(getEffective(bx, f - 1, bz));
+}
+
+/* ---- 把落点挪到门的**侧边** ----
+ * 无限回传的根因就在这里：离开一个维度时记下的是「站在门里」的那个坐标，
+ * 回来时又原样把人塞回同一格 —— 于是一落地就又踩在门方块上，冷却一过
+ * 立刻再传一次，两个维度无限对传。
+ * 所以凡是「要落到某处的坐标」，都得先横向挪出门的覆盖范围再落地。
+ *
+ * 挪动方向优先走门面的**法线**（正/背面各让开一格，等于从门里走出来），
+ * 其次沿门宽方向越过立柱 —— 门洞 2 宽，立柱占 ±1，得让到 ±2 才出得去。
+ * ⚠ 一律用当前全局 dim 读方块：调用点要么还在旧维度（存返程点）、
+ * 要么已经切到新维度（取落点），两种情况 getEffective 读到的都是「门所在的那一侧」。 */
+export function portalSidePos(x, y, z) {
+  if (!portalIdInBox(x, y, z)) return null;      // 没踩在门上，不用挪
+  const bx = Math.floor(x), by = Math.floor(y), bz = Math.floor(z);
+  /* 门洞 2 宽 × 1 厚：沿 u 方向有相邻的门方块，法线方向只有 1 格厚。
+   * 认出 u，法线就是另一根轴；两根轴都没有邻格（比如门只剩一格），走兜底环。 */
+  const ux = isPortalBlock(getEffective(bx - 1, by, bz)) || isPortalBlock(getEffective(bx + 1, by, bz));
+  const uz = !ux && (isPortalBlock(getEffective(bx, by, bz - 1)) || isPortalBlock(getEffective(bx, by, bz + 1)));
+  const cands = [];
+  if (uz)      cands.push([1, 0], [-1, 0], [2, 0], [-2, 0]);        // u = z → 法线 = x
+  else if (ux) cands.push([0, 1], [0, -1], [0, 2], [0, -2]);        // u = x → 法线 = z
+  else         cands.push([1, 0], [-1, 0], [0, 1], [0, -1]);
+  if (ux)      cands.push([2, 0], [-2, 0], [3, 0], [-3, 0]);        // 越过立柱
+  if (uz)      cands.push([0, 2], [0, -2], [0, 3], [0, -3]);
+  for (let r = 1; r <= 4; r++)                                      // 最后兜底：绕圈找
+    for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++)
+      if (Math.max(Math.abs(dx), Math.abs(dz)) === r) cands.push([dx, dz]);
+
+  let loose = null;                              // 只保证「不在门里」，不保证站得住
+  for (const [dx, dz] of cands) {
+    const nx = x + dx, nz = z + dz;
+    if (portalIdInBox(nx, y, nz)) continue;
+    if (!loose) loose = [nx, y, nz];
+    if (standable(nx, y, nz)) return [nx, y, nz];
+  }
+  /* 一圈都站不住（门悬在半空之类的极端情况）—— 至少把人挪出门口，
+   * 让它掉下去也好过卡在门里来回传送。 */
+  return loose;
 }
 
 /* 落点旁边补一扇「回去的门」。门方块不需要黑曜石框（框只是玩家自己搭门时的
@@ -119,7 +170,10 @@ export function buildReturnPortal(backDim) {
 export function switchDim(target, stayAt) {
   if (target === dim || !(target >= 0 && target < DIM_N)) return false;
   const p = player;
-  dimReturnPos[dim] = [p.x, p.y, p.z];
+  /* 返程点存「门外侧」的那一格。存在门里的话，下次回来一落地就又踩在门方块上，
+   * 冷却（1.4s）一过立刻再传一次 —— 两个维度无限对传就是这么来的。
+   * ⚠ 这句必须在 setDim 之前：此刻 getEffective 读的还是旧维度的门。 */
+  dimReturnPos[dim] = portalSidePos(p.x, p.y, p.z) || [p.x, p.y, p.z];
   const from = dim;
   setDim(target);
   setEdits(dimEdits[dim]);                 // 覆盖层跟着换：异界拆的方块不能长回主世界
@@ -146,6 +200,9 @@ export function switchDim(target, stayAt) {
 
   let pos = stayAt || dimReturnPos[dim] || findDimEntry(dim);
   if (!pos) pos = [0.5, 20, 0.5];
+  /* 再挪一次：返程点可能来自旧存档 / 外部传入的 stayAt / 上面那句没挪干净的边角情况。
+   * 落地前统一收口到「门的外侧」，无限回传就不可能成立。 */
+  pos = portalSidePos(pos[0], pos[1], pos[2]) || pos;
   p.x = pos[0]; p.y = pos[1]; p.z = pos[2];
   p.vx = p.vy = p.vz = 0; p.fallPeak = null;
   if (!dimSpawn[dim]) dimSpawn[dim] = [pos[0], pos[1], pos[2]];
