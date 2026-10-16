@@ -22,8 +22,15 @@
 | 中文文本走 DOM 覆盖层，不烘进贴图集 | [0003](../../docs/adr/0003-chinese-text-is-dom-overlay.md) |
 | 只收事实性素材，不收课文原文 | [0004](../../docs/adr/0004-curriculum-content-boundary.md) |
 | 语音走 speechSynthesis，可静默降级 | [0005](../../docs/adr/0005-speech-via-speechsynthesis.md) |
+| 学识只兑换建造权限，不兑资源也不是分数 | [0006](../../docs/adr/0006-scholar-point-is-building-permission.md) |
 
 术语见仓库根 `GLOSSARY.md`。
+
+### 已确认（2026-10-16）
+
+1. **拼音与英语共用 A–Z 字块，声调交给 DOM**（ADR-0002）——拼写判定按不带调字母序列。
+2. **学识 = 建造权限货币**（ADR-0006）——不兑资源、不做分数展示。
+3. **术语「词条」「字块」**（GLOSSARY.md）——最小内容单位称词条，A–Z 方块称字块。
 
 ## 分层
 

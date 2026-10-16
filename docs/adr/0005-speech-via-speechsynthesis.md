@@ -1,3 +1,7 @@
+---
+status: accepted
+---
+
 # 语音走 speechSynthesis，且必须能静默降级
 
 英语朗读走浏览器原生 `speechSynthesis`，封装在 `speak()` 接口后面，不可用时静默降级为纯文字。
