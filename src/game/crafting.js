@@ -6,6 +6,7 @@ import { MODE, mode } from './state.js'
 import { D, G, H, I, W, defName } from './config.js'
 import { keys } from './input.js'
 import { invAdd, invCount, invTake } from './survival.js'
+import { spellResult } from './spell.js'
 import { P } from './textures.js'
 
 /* ============================== 合成 ==============================
@@ -277,10 +278,15 @@ export function matchRecipe(mat) {
   }
   return null;
 }
-/* 当前合成结果：{ out, n } 或 null */
+/* 当前合成结果：{ out, n } 或 { spell } 或 null。
+ *
+ * 先查普通配方，查不到再查拼写 —— 两条路径互斥，因为 `readGlyphRow` 见到
+ * 任何非字块就会放弃。所以「摆了一行字块 + 一格石头」不会误判成拼写。 */
 export function craftResult() {
   const r = matchRecipe();
-  return r ? { out: r.out, n: r.n } : null;
+  if (r) return { out: r.out, n: r.n };
+  const sp = spellResult(craftSlots);
+  return sp ? { spell: sp } : null;
 }
 
 /* 合成格内材料总数（判断「格子空不空」） */
@@ -322,16 +328,25 @@ export function craftClearAt(i) {
  * 材料只消耗「配方真正用到的那几个位置」，多摆的材料原样留着。 */
 export function doCraft() {
   const r = matchRecipe();
-  if (!r) return null;
-  // 数一数每种材料各消耗几个
-  const use = new Map();
-  for (let i = 0; i < CRAFT_N; i++) {
-    const id = craftSlots[i];
-    if (id) use.set(id, (use.get(id) | 0) + 1);
+  if (r) {
+    // 数一数每种材料各消耗几个
+    const use = new Map();
+    for (let i = 0; i < CRAFT_N; i++) {
+      const id = craftSlots[i];
+      if (id) use.set(id, (use.get(id) | 0) + 1);
+    }
+    for (const i of craftSlots.keys()) craftSlots[i] = 0;
+    invAdd(r.out, r.n);
+    return { out: r.out, n: r.n };
   }
+  /* 拼写：字块拼成了课程里的一个词。
+   * ⚠ 这里**不发物品** —— 拼词是一次课业，不是一次制造。产物格显示的就是
+   *   这个词本身；学识结算走 learning/progress（工单 08/09），
+   *   这里只负责把摆上去的字块消耗掉。 */
+  const sp = spellResult(craftSlots);
+  if (!sp) return null;
   for (const i of craftSlots.keys()) craftSlots[i] = 0;
-  invAdd(r.out, r.n);
-  return { out: r.out, n: r.n };
+  return { spell: sp };
 }
 
 /* 合成一本「配方书」的条目：每条给出产物 + 一种可行的摆法，

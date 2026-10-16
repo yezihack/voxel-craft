@@ -11,9 +11,16 @@ const result = computed(() => (engine.craftResult ? engine.craftResult() : null)
 const slotTitle = (id) => (id
   ? engine.defName(id) + '（点一下放回背包）'
   : '合成格 · 点背包里的格子放材料')
-const outTitle = computed(() => (result.value
-  ? '取走 ' + engine.defName(result.value.out) + ' ×' + result.value.n
-  : '把材料按配方摆进左边的九宫格'))
+const outTitle = computed(() => {
+  const r = result.value
+  if (!r) return '把材料按配方摆进左边的九宫格；摆一行字块可以拼出单词或拼音'
+  /* 拼写不给物品 —— 产物就是这个词本身，点一下算完成一次课业 */
+  if (r.spell) {
+    const e = r.spell.entries[0]
+    return '拼成了「' + e.text + '」' + (e.gloss ? ' · ' + e.gloss : e.pinyin ? ' · ' + e.pinyin : '')
+  }
+  return '取走 ' + engine.defName(r.out) + ' ×' + r.n
+})
 </script>
 
 <template>
@@ -35,7 +42,10 @@ const outTitle = computed(() => (result.value
         class="craftout" :class="{ can: !!result }" :title="outTitle"
         @click="engine.takeCraftResult()"
       >
-        <template v-if="result">
+        <template v-if="result && result.spell">
+          <span class="spellword">{{ result.spell.entries[0].text }}</span>
+        </template>
+        <template v-else-if="result">
           <ItemIcon :id="result.out" />
           <span class="cnt">{{ result.n }}</span>
         </template>
@@ -152,6 +162,19 @@ const outTitle = computed(() => (result.value
 .craftout .none {
   color: var(--dim);
   font-size: 20px
+}
+
+/* 拼写的产物是**词本身**（ADR-0003：中文走 DOM 覆盖层，不做方块贴图）。
+ * 60px 的格子装得下 3~4 个汉字，更长的词靠缩小字号兜住。 */
+.craftout .spellword {
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.15;
+  text-align: center;
+  padding: 0 4px;
+  word-break: break-all;
+  text-shadow: 0 1px 3px #000, 0 0 2px #000;
 }
 
 .craftright {

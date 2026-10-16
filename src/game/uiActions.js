@@ -65,10 +65,18 @@ export function clearCraftAll() {
   blip(360, 0.05, 'sine', 0.03)
 }
 
-/* 点结果格：取走成品 */
+/* 点结果格：取走成品。
+ * 拼写是另一条路（合成台里摆出一行字块） —— 它不发物品，只报「拼成了哪个词」，
+ * 学识结算等 learning/progress 接进来（工单 08/09）。 */
 export function takeCraftResult() {
   const r = doCraft()
   if (!r) return
+  if (r.spell) {
+    const e = r.spell.entries[0]
+    blip(980, 0.10, 'sine', 0.05)
+    toast('✏️ 拼出了「' + e.text + '」' + (e.gloss ? ' · ' + e.gloss : e.pinyin ? ' · ' + e.pinyin : ''))
+    return
+  }
   blip(880, 0.09, 'sine', 0.05)
   toast('🔨 合成 ' + defName(r.out) + (r.n > 1 ? ' ×' + r.n : ''))
 }

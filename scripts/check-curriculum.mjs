@@ -118,5 +118,73 @@ ok(normalizeSpell('o\'clock') === 'oclock', `撇号: ${normalizeSpell('o\'clock'
   ok(r1() === r2() && r1() === r2(), 'rng 同一 seed 结果不同');
 }
 
+/* ---- 10. 拼写合成（工单 03/04）---- */
+{
+  const { GLYPH_BLOCK, GLYPH_CHARS } = await import('../src/game/config.js');
+  const { readGlyphSeq: readGlyphRow, spellMatch, spellResult } = await import('../src/game/spell.js');
+  const { SPELL_TABLE, SPELL_COLLISIONS } = await import('../src/data/curriculum/spellTable.js');
+
+  ok(GLYPH_CHARS.length === 26, `字块不是 26 个: ${GLYPH_CHARS.length}`);
+  ok(Object.values(GLYPH_BLOCK).every((id) => id > 0 && id < 200), '字块 id 越出了方块段');
+
+  /* 字块表里是大写字母，摆台子时要先转大写；读出来的序列自然也是大写 ——
+   * 判定侧才由 normalizeSpell 统一转小写。 */
+  const row = (s, r0 = 1) => {
+    const a = new Array(9).fill(0);
+    const up = s.toUpperCase();
+    for (let i = 0; i < up.length; i++) a[r0 * 3 + i] = GLYPH_BLOCK[up[i]];
+    return a;
+  };
+
+  ok(readGlyphRow(row('cat')) === 'CAT', '读一行字块失败');
+  ok(readGlyphRow(row('cat', 0)) === 'CAT', '第一行读不出来');
+  ok(readGlyphRow(new Array(9).fill(0)) === null, '空合成台不该读出词');
+  /* 空档：C A _ / T _ _ —— 字块没挨着，读不出来 */
+  {
+    const a = new Array(9).fill(0);
+    a[3] = GLYPH_BLOCK.C; a[4] = GLYPH_BLOCK.A; a[6] = GLYPH_BLOCK.T;
+    ok(readGlyphRow(a) === null, '字块没挨着竟然读出了词');
+  }
+  /* 换行续摆：一行只有 3 格，pingba（坪坝）必须能跨行 */
+  {
+    const a = new Array(9).fill(0);
+    'PINGBA'.split('').forEach((c, i) => { a[i] = GLYPH_BLOCK[c]; });
+    ok(readGlyphRow(a) === 'PINGBA', '跨行续摆读不出来');
+    ok(!!spellResult(a), '跨行摆的 pingba 没拼出来');
+  }
+  /* 9 格封顶：摆满 9 个字母要能读出来 */
+  {
+    const a = new Array(9).fill(0);
+    'CLASSROOM'.split('').forEach((c, i) => { a[i] = GLYPH_BLOCK[c]; });
+    ok(readGlyphRow(a) === 'CLASSROOM', '9 格读不出来');
+    ok(!!spellResult(a), 'classroom 没拼出来');
+  }
+  /* 混进非字块 → 交回普通配方 */
+  {
+    const a = row('cat'); a[0] = 3;                 // 石头
+    ok(readGlyphRow(a) === null, '混进非字块竟然没放弃');
+  }
+
+  ok(!!spellMatch('cat'), 'cat 没命中词表');
+  ok(!!spellMatch('CAT'), 'CAT 大小写不敏感失败');
+  ok(!spellMatch('zzzq'), 'zzzq 不该命中');
+  ok(!!spellMatch('pingba'), '拼音 pingba（坪坝）没命中');
+  ok(!!spellMatch('píng bà'), '带调拼音没命中（声调不该影响判定）');
+
+  const r = spellResult(row('cat'));
+  ok(!!r && r.entries.length > 0, 'spellResult(cat) 没结果');
+  ok(r && r.entries[0].text === 'cat', `spellResult(cat) 命中了 ${r && r.entries[0].text}`);
+  ok(spellResult(row('zzq')) === null, 'spellResult(zzq) 不该有结果');
+
+  /* 拼音和英语共用同一张表 —— 这正是 ADR-0002 想换来的 */
+  ok(spellResult(row('pingba')).entries[0].lang === 'zh', '拼音没命中语文词条');
+  ok(spellResult(row('cat')).entries[0].lang === 'en', '英文没命中英语词条');
+
+  console.log(`拼写: 词表 ${SPELL_TABLE.size} 个 key，撞 key ${SPELL_COLLISIONS.length} 处`);
+  if (SPELL_COLLISIONS.length) {
+    for (const c of SPELL_COLLISIONS.slice(0, 8)) console.log('  撞:', c.key, c.ids.join(' / '));
+  }
+}
+
 console.log(fails === 0 ? '\n全部通过' : `\n失败 ${fails} 项`);
 process.exit(fails === 0 ? 0 : 1);

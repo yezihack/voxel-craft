@@ -161,6 +161,37 @@ export const BLOCKS = [
   { name:'毒沼',   top:[104,176, 74], side:[ 88,156, 66], bot:[ 78,138, 58], n:'毒', alpha:.74,
     liquid:true, hurt:1, toxic:true, tex:'toxic' },
 ];
+
+/* ---------------- 字块：A–Z ----------------
+ * 英语拼写与汉语拼音**共用**这一套 26 种方块（ADR-0002）。
+ * 拼音和英语各做一份的话是 52 格，共用只要 26 格 —— 贴图集余量有限，
+ * 这个差别是决定性的；顺带「拼单词」和「看拼音写词语」也变成同一个交互。
+ *
+ * ⚠ 字块是**方块**（可放置），汉字是**物品**（不可放置）—— 分属不同 id 段，
+ *   不要为了「统一」把它们混在一起（ADR-0002）。
+ * ⚠ 声调不是字块的一部分：方块上只有不带调的字母，声调交给 DOM 层显示。
+ * ⚠ 一律追加在表尾。往 BLOCKS 中间插方块会顶掉后面所有 id，裸数字会静默串味。 */
+const GLYPH_PLATE = [236, 226, 200];         // 象牙白底板，配深色墨字
+for (let i = 0; i < 26; i++) {
+  const ch = String.fromCharCode(65 + i);
+  BLOCKS.push({
+    name: '字块·' + ch, n: ch,
+    top: GLYPH_PLATE, side: GLYPH_PLATE, bot: GLYPH_PLATE,
+    hard: 0.35, tex: 'glyph_' + ch,
+  });
+}
+/* 字母 ↔ 方块 id 的双向查表。拼写合成（spell.js）只认这两张表，不裸写 id。 */
+export const GLYPH_BLOCK = {};
+export const GLYPH_LETTER = {};
+BLOCKS.forEach((b, i) => {
+  if (!b || typeof b.tex !== 'string' || b.tex.indexOf('glyph_') !== 0) return;
+  const ch = b.tex.slice(6);
+  GLYPH_BLOCK[ch] = i;
+  GLYPH_LETTER[i] = ch;
+});
+export const isGlyphBlock = (id) => GLYPH_LETTER[id] !== undefined;
+export const GLYPH_CHARS = Object.keys(GLYPH_BLOCK);
+
 export const SOLID = {};                    // id → 是否实体
 /* 传送门不参与碰撞（portal:true）—— 不然玩家会站在自己的门板上，走不进另一个维度 */
 BLOCKS.forEach((b, i) => { if (b) SOLID[i] = !b.liquid && !b.portal; });

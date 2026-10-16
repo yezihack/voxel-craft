@@ -761,6 +761,49 @@ export function oreTile(s, c, ore) {
       }
   }
 }
+/* ---------------- 字块：A–Z ----------------
+ * ⚠ 这里是**画贴图**，不是 3D 文字渲染 —— 和 ADR-0003「中文走 DOM 覆盖层」
+ *   不冲突：26 个字母是有限集，可以进贴图集；汉字不是，所以只能走 DOM。
+ *
+ * 用 fillText 取字形、再按 alpha 阈值转成 0/1 掩码、最后用 P() 逐像素写。
+ * 直接 fillText 到贴图集会被抗锯齿糊成灰边，和全场的「逐像素写」风格不搭；
+ * 走一遍阈值就得到硬边字形，跟石头/木板那些贴图是同一种颗粒感。
+ * 掩码按字母缓存 —— 26 个字母各画一次，之后纯复用。 */
+const glyphMaskCache = new Map();
+function glyphMask(ch) {
+  let m = glyphMaskCache.get(ch);
+  if (m) return m;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = TP;
+  const c = cv.getContext('2d');
+  c.fillStyle = '#fff';
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.font = `bold ${Math.round(TP * 0.80)}px "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif`;
+  /* +TP*0.04 是手写体的视觉补偿：middle 基线会让大写字母整体偏上一点 */
+  c.fillText(ch, TP / 2, TP / 2 + TP * 0.04);
+  const d = c.getImageData(0, 0, TP, TP).data;
+  const mask = new Uint8Array(TP * TP);
+  for (let i = 0; i < TP * TP; i++) mask[i] = d[i * 4 + 3] >= 128 ? 1 : 0;
+  glyphMaskCache.set(ch, mask);
+  return mask;
+}
+
+export function glyphTile(ch, s, base) {
+  noiseTile(s, base, 7, 0);                       // 象牙底 + 细噪点，像一块字母牌
+  const edge = shade(base, -52);
+  for (let i = 0; i < TP; i++) {                  // 一圈压暗的边框
+    P(i, 0, edge); P(i, TPM, edge);
+    P(0, i, edge); P(TPM, i, edge);
+  }
+  const ink = shade(base, -170);
+  const mask = glyphMask(ch);
+  for (let y = 1; y < TPM; y++) for (let x = 1; x < TPM; x++) {   // 跳过边框那一圈
+    if (mask[y * TP + x]) P(x, y, ink);
+  }
+  return true;
+}
+
 /* ---------------- 工具 / 武器 / 弹药图标 ----------------
  * 全部按 16×16 逻辑格绘制（IU = TP/16 = 2，即每格 2×2 像素）：
  * 逻辑坐标写起来清楚，落到 32×32 的贴图格上又正好和方块贴图同分辨率，
@@ -1012,6 +1055,7 @@ export function drawNamedTile(name, idx, base) {
   const s = idx * 977 + 13;
   if (name.indexOf('wool_') === 0) return TILE_GEN[name] ? TILE_GEN[name](s, base) : woolTile(s, base);
   if (name.indexOf('ore_') === 0) return oreTile(s, TILE_COLOR['stone'] || base, TILE_ORE[name] || [200, 200, 200]);
+  if (name.indexOf('glyph_') === 0) return glyphTile(name.slice(6), s, base);
   if (name.indexOf('item_') === 0) return itemTile(name, s, ITEM_TEX_COLOR[name] || base);
   const fn = TILE_GEN[name];
   if (fn) return fn(s, base);

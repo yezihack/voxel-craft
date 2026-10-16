@@ -1,5 +1,5 @@
 Type: task
-Status: needs-triage
+Status: resolved
 Blocked by: —
 
 # A–Z 共 26 种字块
@@ -17,5 +17,20 @@ Blocked by: —
 ✅ 已确认（2026-10-16）：声调**不进字块**，由 DOM 层显示。字块上只有不带调的字母。
 
 ## Answer
+
+2026-10-16 完成。
+
+- `config.js` 表尾**追加** 26 条字块（id 52–77），底板色 `GLYPH_PLATE`，
+  `hard: 0.35`（和羊毛同级，好摆好拆），`n` 直接用字母本身（正好 1 字符）
+- 导出 `GLYPH_BLOCK`（字母→id）/ `GLYPH_LETTER`（id→字母）/ `isGlyphBlock` / `GLYPH_CHARS`
+- `textures.js` 加 `glyphTile()`：底噪 + 一圈压暗边框 + 深色墨字；
+  字形用 `fillText` 取到离屏 canvas，按 alpha≥128 转成 0/1 掩码再用 `P()` 逐像素写 ——
+  直接 fillText 会被抗锯齿糊成灰边，跟全场「逐像素写」的风格不搭。掩码按字母缓存。
+
+**贴图账**：147 → **173 / 256**，余 83。符合预估，没触发 config 里那句
+「贴图格数不足」的载入期抛错。方块总数 51 → 77，全部 < 200（物品段），没串味。
+
+**为什么这里能用 fillText**：这是**画贴图**，不是 3D 文字渲染 —— 和 ADR-0003
+「中文走 DOM 覆盖层」不冲突。26 个字母是有限集，进得了贴图集；汉字不是，所以只能走 DOM。
 
 ## Comments
