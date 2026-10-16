@@ -1,0 +1,20 @@
+Type: task
+Status: needs-triage
+Blocked by: —
+
+# A–Z 共 26 种字块
+
+`config.js` 的 `BLOCKS` **追加** 26 条（不许插队，1–15 语义锁死），
+`ITEMS` 不受影响（字块是可放置方块）。
+
+- 贴图名 `glyph_A` … `glyph_Z`，在 `textures.js` 里用离屏 canvas 的 `fillText` 绘制
+  —— 注意这是**画贴图**，不是 3D 文字渲染，和 ADR-0003 不冲突。
+- `n`（物品栏短名）直接用字母本身，正好 1 个字符，和现有「1 个汉字」的约定一致。
+- 注册后贴图占用从 147 涨到 173 / 256，余 83。加完要确认没触发
+  config.js 里那句「贴图格数不足」的载入期抛错。
+
+⚠ 拼音与英语**共用**这一套，不要各做一份（ADR-0002）。
+
+## Answer
+
+## Comments
