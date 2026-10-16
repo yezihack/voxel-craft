@@ -1,0 +1,1517 @@
+[
+  {
+    "file": "config.js",
+    "lines": 590,
+    "exports": [
+      "ATLAS_COLS",
+      "ATLAS_PX",
+      "BLOCKS",
+      "BLOCK_MAT",
+      "CD",
+      "CH",
+      "CORE_ITEM",
+      "CW",
+      "CX",
+      "CY",
+      "CZ",
+      "D",
+      "EGG_OF",
+      "EYE",
+      "FIST_DMG",
+      "G",
+      "H",
+      "HOTBAR",
+      "I",
+      "ID",
+      "ID_ITEM_BASE",
+      "ITEMS",
+      "ITEM_TIER_NAME",
+      "JUMP_V",
+      "KIND_DMG",
+      "KIND_NAME",
+      "LAVA_RECT",
+      "MAT_FOLIAGE",
+      "MAT_LAVA",
+      "MAT_PLAIN",
+      "MAT_PORTAL",
+      "MAT_TOXIC",
+      "MAT_WATER",
+      "MOB_TILE_COLORS",
+      "OFF_ALPHA",
+      "OFF_FLAG",
+      "OFF_LIT",
+      "OFF_POS",
+      "OFF_UV",
+      "PORTAL_BLOCK",
+      "PORTAL_DIM",
+      "PW",
+      "QUAD_POS",
+      "REACH",
+      "SEA",
+      "SEED",
+      "SOLID",
+      "STRIDE",
+      "SUMMON_OF",
+      "TEXEL",
+      "TIER_DMG",
+      "TIER_SPEED",
+      "TILE_COLOR",
+      "TILE_INDEX",
+      "TILE_NAMES",
+      "TILE_ORE",
+      "TILE_PX",
+      "TOOL_GOOD",
+      "TOOL_OF",
+      "TP",
+      "TPH",
+      "TPM",
+      "UV_QUAD",
+      "W",
+      "WATER_RECT",
+      "attackDamage",
+      "breakTime",
+      "defColor",
+      "defName",
+      "defOf",
+      "defShort",
+      "dropCountOf",
+      "dropOf",
+      "isBlockId",
+      "isPortalBlock",
+      "itemTip",
+      "matFlagOf",
+      "registerTile",
+      "texNameOf",
+      "tileIndexOf",
+      "tileOfId",
+      "tileUV",
+      "tileUVRect",
+      "toolSpeedOn"
+    ],
+    "imports": {
+      "survival": [
+        "heldId",
+        "hurt"
+      ]
+    }
+  },
+  {
+    "file": "math.js",
+    "lines": 103,
+    "exports": [
+      "M4",
+      "clamp",
+      "fbm",
+      "hash2",
+      "noise2",
+      "smooth"
+    ],
+    "imports": {}
+  },
+  {
+    "file": "world.js",
+    "lines": 95,
+    "exports": [
+      "BEDROCK_Y",
+      "BIOME",
+      "COL_CACHE_MAX",
+      "TERRAIN_MAX",
+      "TERRAIN_MIN",
+      "colCache",
+      "colCacheSeed",
+      "colHeight",
+      "colInfo",
+      "ensureColCache",
+      "overColInfo"
+    ],
+    "imports": {
+      "config": [
+        "H",
+        "SEA",
+        "SEED"
+      ],
+      "dims": [
+        "dim",
+        "dimColInfo"
+      ],
+      "math": [
+        "clamp",
+        "fbm"
+      ]
+    }
+  },
+  {
+    "file": "dims.js",
+    "lines": 509,
+    "exports": [
+      "CELL",
+      "DECO_CELL",
+      "DIMS",
+      "DIM_N",
+      "STRUCT_NAME",
+      "collectStruct",
+      "decoAt",
+      "dim",
+      "dimBlockAt",
+      "dimCarved",
+      "dimColInfo",
+      "dimDecoAt",
+      "dimSurfaceY",
+      "findDimEntry",
+      "inStructFootprint",
+      "stoneAt",
+      "structAnchor",
+      "structAt",
+      "structBlockAt",
+      "structShapeAt",
+      "structShapeCache",
+      "subsoilOf",
+      "surfaceBlockOf",
+      "treeAt",
+      "treeBlockAt"
+    ],
+    "imports": {
+      "fluid": [
+        "collectDesertTemple",
+        "collectIgloo",
+        "collectJungleTemple",
+        "collectMine",
+        "collectRuin",
+        "collectSnowVillage",
+        "collectVillage",
+        "lavaAt",
+        "oreVein"
+      ],
+      "math": [
+        "clamp",
+        "fbm",
+        "hash2"
+      ],
+      "world": [
+        "BEDROCK_Y",
+        "BIOME",
+        "TERRAIN_MAX",
+        "TERRAIN_MIN",
+        "colHeight",
+        "colInfo"
+      ],
+      "config": [
+        "D",
+        "H",
+        "I",
+        "PORTAL_BLOCK",
+        "SEA",
+        "SEED"
+      ],
+      "generate": [
+        "EKEY",
+        "isSolid"
+      ]
+    }
+  },
+  {
+    "file": "generate.js",
+    "lines": 90,
+    "exports": [
+      "EKEY",
+      "dimEdits",
+      "edits",
+      "getBlock",
+      "getEffective",
+      "isClearLike",
+      "isLiquid",
+      "isOpaque",
+      "isSolid",
+      "setBase",
+      "setBlock"
+    ],
+    "imports": {
+      "config": [
+        "BLOCKS",
+        "H",
+        "I",
+        "SEA",
+        "SOLID"
+      ],
+      "dims": [
+        "DIM_N",
+        "decoAt",
+        "dim",
+        "dimBlockAt",
+        "stoneAt",
+        "structBlockAt",
+        "subsoilOf",
+        "surfaceBlockOf",
+        "treeBlockAt"
+      ],
+      "world": [
+        "BEDROCK_Y",
+        "BIOME",
+        "colInfo"
+      ],
+      "fluid": [
+        "fluid",
+        "fluidWake"
+      ],
+      "mesher": [
+        "dirtyChunkOf"
+      ]
+    }
+  },
+  {
+    "file": "portal.js",
+    "lines": 155,
+    "exports": [
+      "PORTAL_H",
+      "PORTAL_W",
+      "buildReturnPortal",
+      "dimReturnPos",
+      "dimSpawn",
+      "dimVisited",
+      "findPortalFrame",
+      "ignitePortal",
+      "portalCd",
+      "portalFrameCells",
+      "portalIdInPlayer",
+      "switchDim"
+    ],
+    "imports": {
+      "bots": [
+        "despawnAllBotDrops",
+        "despawnAllBots"
+      ],
+      "dims": [
+        "DIMS",
+        "DIM_N",
+        "dim",
+        "findDimEntry"
+      ],
+      "audio": [
+        "blip"
+      ],
+      "generate": [
+        "dimEdits",
+        "edits",
+        "getEffective",
+        "isSolid",
+        "setBlock"
+      ],
+      "mobs": [
+        "arrows",
+        "despawnAllMobs",
+        "spectate"
+      ],
+      "post": [
+        "updateSkyColor"
+      ],
+      "fluid": [
+        "fluid",
+        "fluidActive"
+      ],
+      "config": [
+        "D",
+        "H",
+        "I",
+        "PORTAL_BLOCK",
+        "PW",
+        "SEED",
+        "isPortalBlock"
+      ],
+      "world": [
+        "colCache",
+        "colCacheSeed"
+      ],
+      "mesher": [
+        "chunks"
+      ],
+      "player": [
+        "player"
+      ]
+    }
+  },
+  {
+    "file": "fluid.js",
+    "lines": 829,
+    "exports": [
+      "FLUID_CAP",
+      "FLUID_DIRS",
+      "FLUID_MAX",
+      "FLUID_PERIOD",
+      "SAMPLE_N",
+      "anchorGround",
+      "collectDesertTemple",
+      "collectIgloo",
+      "collectIglooAt",
+      "collectJungleTemple",
+      "collectMine",
+      "collectRuin",
+      "collectSnowVillage",
+      "collectVillage",
+      "emitChurch",
+      "emitFarm",
+      "emitHouse",
+      "emitSmithy",
+      "findSpawn",
+      "fluid",
+      "fluidAcc",
+      "fluidActive",
+      "fluidHeightAt",
+      "fluidHeightOf",
+      "fluidLevelAt",
+      "fluidRecompute",
+      "fluidReplaceable",
+      "fluidTick",
+      "fluidWake",
+      "generate",
+      "isWaterAt",
+      "lavaAt",
+      "oreVein",
+      "rndAt",
+      "updateFluid",
+      "worldCensus"
+    ],
+    "imports": {
+      "math": [
+        "fbm",
+        "hash2"
+      ],
+      "dims": [
+        "CELL",
+        "decoAt",
+        "stoneAt",
+        "structAt",
+        "structShapeCache",
+        "treeAt"
+      ],
+      "world": [
+        "BIOME",
+        "colCache",
+        "colCacheSeed",
+        "colHeight",
+        "colInfo"
+      ],
+      "mesher": [
+        "dirtyChunkOf"
+      ],
+      "generate": [
+        "EKEY",
+        "getEffective",
+        "setBlock"
+      ],
+      "config": [
+        "H",
+        "I",
+        "SEA",
+        "SEED"
+      ]
+    }
+  },
+  {
+    "file": "mesher.js",
+    "lines": 179,
+    "exports": [
+      "FACES",
+      "VIEW_CX",
+      "VIEW_CZ",
+      "anchorGX",
+      "anchorGZ",
+      "buildChunk",
+      "chunks",
+      "dirtyChunkOf",
+      "initChunks",
+      "makeChunk",
+      "shiftChunks",
+      "vertexAO"
+    ],
+    "imports": {
+      "textures": [
+        "shade"
+      ],
+      "math": [
+        "clamp",
+        "hash2"
+      ],
+      "config": [
+        "BLOCKS",
+        "CD",
+        "CH",
+        "CW",
+        "CY",
+        "UV_QUAD",
+        "matFlagOf",
+        "tileIndexOf",
+        "tileUV"
+      ],
+      "generate": [
+        "getEffective",
+        "isClearLike",
+        "isOpaque"
+      ],
+      "fluid": [
+        "fluidHeightAt"
+      ]
+    }
+  },
+  {
+    "file": "textures.js",
+    "lines": 1142,
+    "exports": [
+      "ISO_H",
+      "ISO_W",
+      "ITEM_TEX_COLOR",
+      "IU",
+      "P",
+      "PL",
+      "PL2",
+      "PQ",
+      "TILE_GEN",
+      "WOOD_HANDLE",
+      "WOOD_HANDLE_DK",
+      "alctx",
+      "atlasCanvas",
+      "atlasImageData",
+      "atlasPixels",
+      "blitFace",
+      "buildAtlas",
+      "cobbleBase",
+      "dimCoreIcon",
+      "drawNamedTile",
+      "eggIconTile",
+      "flatCache",
+      "flatIcon",
+      "furTile",
+      "golemCoreIcon",
+      "isoCache",
+      "isoIcon",
+      "itemTile",
+      "noiseTile",
+      "oreTile",
+      "plankLike",
+      "portalTile",
+      "propIconTile",
+      "shade",
+      "tilePenX",
+      "tilePenY",
+      "tileRect",
+      "toolIconTile",
+      "woolTile"
+    ],
+    "imports": {
+      "config": [
+        "ATLAS_COLS",
+        "ATLAS_PX",
+        "D",
+        "H",
+        "ITEMS",
+        "TILE_COLOR",
+        "TILE_NAMES",
+        "TILE_ORE",
+        "TILE_PX",
+        "TP",
+        "TPH",
+        "TPM",
+        "isBlockId",
+        "tileOfId"
+      ],
+      "math": [
+        "hash2"
+      ]
+    }
+  },
+  {
+    "file": "renderer.js",
+    "lines": 214,
+    "exports": [
+      "FS",
+      "LFS",
+      "LVS",
+      "PREC",
+      "VS",
+      "canvas",
+      "compile",
+      "gl",
+      "isGL2",
+      "locLine",
+      "locMain",
+      "progLine",
+      "progMain",
+      "program"
+    ],
+    "imports": {}
+  },
+  {
+    "file": "sky.js",
+    "lines": 158,
+    "exports": [
+      "CLOUD_PX",
+      "SKY_FS",
+      "SKY_VS",
+      "buildCloudTexture",
+      "cloudCanvas",
+      "cloudTex",
+      "drawSky",
+      "locSky",
+      "progSky",
+      "skyQuad"
+    ],
+    "imports": {
+      "post": [
+        "CLOUD_AMT",
+        "CLOUD_TINT",
+        "NIGHT",
+        "SHADER_T",
+        "SKY",
+        "SKY_GROUND",
+        "SKY_TOP",
+        "SUN_COL",
+        "SUN_DIR",
+        "drawFullscreenQuad"
+      ],
+      "renderer": [
+        "canvas",
+        "gl",
+        "program"
+      ],
+      "math": [
+        "clamp",
+        "fbm"
+      ]
+    }
+  },
+  {
+    "file": "post.js",
+    "lines": 852,
+    "exports": [
+      "AMBIENT",
+      "BLOOM_DIV",
+      "BLUR_FS",
+      "CLOUD_AMT",
+      "CLOUD_TINT",
+      "FOG_FAR",
+      "FOG_HEIGHT",
+      "FOG_NEAR",
+      "LINE_VERTS",
+      "NIGHT",
+      "POST_FS",
+      "POST_VS",
+      "SHADER_T",
+      "SKY",
+      "SKY_DAY",
+      "SKY_DUSK",
+      "SKY_GROUND",
+      "SKY_NIGHT",
+      "SKY_TOP",
+      "SUN_COL",
+      "SUN_DIR",
+      "arrowGpu",
+      "atlasMipLevels",
+      "atlasTex",
+      "ballGpu",
+      "bindChunk",
+      "bindHand",
+      "bindLayout",
+      "bindMob",
+      "blit",
+      "bloomFbo",
+      "bloomTex",
+      "botGpu",
+      "buildArrowGpu",
+      "buildBallGpu",
+      "buildMipChain",
+      "composite",
+      "drawArrows",
+      "drawBotDrops",
+      "drawBots",
+      "drawChunkBlend",
+      "drawChunkOpaque",
+      "drawFullscreenQuad",
+      "drawHandView",
+      "drawMobs",
+      "dropGpu",
+      "ensureFbos",
+      "fbH",
+      "fbW",
+      "gpuFromArrays",
+      "handGpu",
+      "handMeshData",
+      "lineBuf",
+      "locBlur",
+      "locPost",
+      "mixSky",
+      "mkColorTex",
+      "mobGpu",
+      "postOK",
+      "progBlur",
+      "progPost",
+      "put3",
+      "runBloom",
+      "sceneDepth",
+      "sceneFbo",
+      "sceneTex",
+      "updateSkyColor",
+      "uploadAtlas",
+      "uploadBotMesh",
+      "uploadChunk",
+      "uploadDropMesh",
+      "uploadMobMeshes"
+    ],
+    "imports": {
+      "textures": [
+        "alctx",
+        "atlasCanvas",
+        "shade"
+      ],
+      "config": [
+        "ATLAS_PX",
+        "D",
+        "EYE",
+        "MAT_PLAIN",
+        "OFF_ALPHA",
+        "OFF_FLAG",
+        "OFF_LIT",
+        "OFF_POS",
+        "OFF_UV",
+        "QUAD_POS",
+        "SEA",
+        "STRIDE",
+        "UV_QUAD",
+        "defColor",
+        "isBlockId",
+        "tileOfId",
+        "tileUV"
+      ],
+      "dims": [
+        "DIMS",
+        "dim"
+      ],
+      "bots": [
+        "BOT_PARTS",
+        "botDrops",
+        "bots"
+      ],
+      "mobs": [
+        "MOB_TYPES",
+        "arrows",
+        "boxGeo",
+        "buildMobMesh",
+        "dayPhase",
+        "handSwing",
+        "mobs",
+        "swingT",
+        "worldTime"
+      ],
+      "survival": [
+        "MODE",
+        "heldId",
+        "hurt",
+        "mode"
+      ],
+      "renderer": [
+        "gl",
+        "isGL2",
+        "locMain",
+        "progMain",
+        "program"
+      ],
+      "sky": [
+        "SKY_VS",
+        "skyQuad"
+      ],
+      "mesher": [
+        "FACES"
+      ],
+      "math": [
+        "M4",
+        "clamp"
+      ],
+      "player": [
+        "player"
+      ]
+    }
+  },
+  {
+    "file": "player.js",
+    "lines": 172,
+    "exports": [
+      "insideSelf",
+      "moveAxis",
+      "moveBodyAxis",
+      "player",
+      "raycast",
+      "updatePhysics"
+    ],
+    "imports": {
+      "dims": [
+        "DIMS",
+        "dim"
+      ],
+      "config": [
+        "BLOCKS",
+        "EYE",
+        "G",
+        "I",
+        "JUMP_V",
+        "PW"
+      ],
+      "generate": [
+        "getEffective",
+        "isLiquid",
+        "isSolid"
+      ],
+      "input": [
+        "input"
+      ],
+      "survival": [
+        "MODE",
+        "die",
+        "mode",
+        "respawn"
+      ],
+      "mobs": [
+        "spectate"
+      ]
+    }
+  },
+  {
+    "file": "survival.js",
+    "lines": 267,
+    "exports": [
+      "HOTBAR_N",
+      "MODE",
+      "SLOT_N",
+      "STORE_N",
+      "SURV",
+      "activeSlots",
+      "autoSlot",
+      "cancelDig",
+      "collectDrop",
+      "deathReason",
+      "die",
+      "dig",
+      "digProgress",
+      "heal",
+      "heldId",
+      "hurt",
+      "inv",
+      "invAdd",
+      "invCount",
+      "invDirty",
+      "invSlots",
+      "invTake",
+      "mode",
+      "onDeath",
+      "onHurt",
+      "pruneSlots",
+      "respawn",
+      "selected",
+      "tryEat",
+      "updateDig",
+      "updateSurvival"
+    ],
+    "imports": {
+      "config": [
+        "BLOCKS",
+        "EYE",
+        "HOTBAR",
+        "I",
+        "ITEMS",
+        "PW",
+        "breakTime",
+        "dropCountOf",
+        "dropOf"
+      ],
+      "generate": [
+        "getEffective"
+      ],
+      "input": [
+        "input"
+      ],
+      "player": [
+        "player"
+      ],
+      "math": [
+        "clamp"
+      ]
+    }
+  },
+  {
+    "file": "crafting.js",
+    "lines": 364,
+    "exports": [
+      "CRAFT_KEY",
+      "CRAFT_N",
+      "RECIPES",
+      "RECIPE_CACHE",
+      "clearCraft",
+      "craftAutoFill",
+      "craftClearAt",
+      "craftFilled",
+      "craftKeyTable",
+      "craftMat",
+      "craftMatrix",
+      "craftPlace",
+      "craftResult",
+      "craftSlots",
+      "doCraft",
+      "gridMatches",
+      "matchRecipe",
+      "recipeBookEntries",
+      "recipeMatrix",
+      "recipeMissing",
+      "shapelessMatches"
+    ],
+    "imports": {
+      "config": [
+        "D",
+        "G",
+        "H",
+        "I",
+        "W",
+        "defName"
+      ],
+      "survival": [
+        "MODE",
+        "invAdd",
+        "invCount",
+        "invDirty",
+        "invTake",
+        "mode"
+      ],
+      "input": [
+        "keys"
+      ],
+      "textures": [
+        "P"
+      ]
+    }
+  },
+  {
+    "file": "mobs.js",
+    "lines": 1168,
+    "exports": [
+      "ARROW_GRAV",
+      "DAY_LEN",
+      "EGG_MOBS",
+      "GUARD_CAP",
+      "GUARD_TYPES",
+      "MOB_CAP",
+      "MOB_HOP_V",
+      "MOB_TYPES",
+      "NIGHT_POOL",
+      "PASSIVE_TYPES",
+      "SNOWBALL_GRAV",
+      "SPIDER_CLIMB",
+      "VILLAGE_TYPES",
+      "arrows",
+      "bowCharge",
+      "boxGeo",
+      "buildMobMesh",
+      "canSummonAt",
+      "damageMob",
+      "dayPhase",
+      "despawnAllMobs",
+      "dimMobSpawn",
+      "dimSpawnY",
+      "explodeMob",
+      "findNearbyVillage",
+      "fireArrow",
+      "guardCount",
+      "handSwing",
+      "hazardAhead",
+      "hostileTarget",
+      "isGuardType",
+      "isHostileType",
+      "isNight",
+      "mobAI",
+      "mobBounds",
+      "mobDeathDrop",
+      "mobPhysics",
+      "mobRng",
+      "mobSpawnT",
+      "mobs",
+      "nearestThreat",
+      "pickNightType",
+      "rayBox",
+      "raycastMob",
+      "shootArrowAt",
+      "spawnMob",
+      "spectate",
+      "summonGolem",
+      "surfaceY",
+      "swingT",
+      "throwSnowball",
+      "tryAttackMob",
+      "updateArrows",
+      "updateMobSpawn",
+      "updateMobs",
+      "villageSpawnN",
+      "walkOn",
+      "worldTime"
+    ],
+    "imports": {
+      "audio": [
+        "blip",
+        "noiseBurst"
+      ],
+      "textures": [
+        "shade"
+      ],
+      "survival": [
+        "MODE",
+        "hurt",
+        "inv",
+        "invAdd",
+        "mode"
+      ],
+      "dims": [
+        "CELL",
+        "DIMS",
+        "dim",
+        "structAnchor",
+        "structAt"
+      ],
+      "generate": [
+        "getEffective",
+        "isLiquid",
+        "isSolid",
+        "setBlock"
+      ],
+      "config": [
+        "BLOCKS",
+        "D",
+        "EGG_OF",
+        "EYE",
+        "G",
+        "H",
+        "I",
+        "ITEMS",
+        "JUMP_V",
+        "MAT_PLAIN",
+        "PW",
+        "REACH",
+        "SUMMON_OF",
+        "TILE_INDEX",
+        "UV_QUAD",
+        "attackDamage",
+        "tileUV"
+      ],
+      "input": [
+        "keys"
+      ],
+      "mesher": [
+        "FACES"
+      ],
+      "player": [
+        "moveBodyAxis",
+        "player"
+      ],
+      "actions": [
+        "spawnParticles"
+      ]
+    }
+  },
+  {
+    "file": "bots.js",
+    "lines": 778,
+    "exports": [
+      "BOT_CAP",
+      "BOT_DROP_LIFE",
+      "BOT_DROP_MERGE",
+      "BOT_H",
+      "BOT_HAIRS",
+      "BOT_KEEP",
+      "BOT_MIN",
+      "BOT_NAMES",
+      "BOT_PARTS",
+      "BOT_SHIRTS",
+      "BOT_SKINS",
+      "BOT_SPAWN_MAX",
+      "BOT_SPAWN_MIN",
+      "BOT_W",
+      "BOT_WANT",
+      "botBagAdd",
+      "botBagCount",
+      "botBagTake",
+      "botBuild",
+      "botBuildSite",
+      "botDecide",
+      "botDropBag",
+      "botDrops",
+      "botEat",
+      "botFight",
+      "botFindOre",
+      "botFleeTo",
+      "botFreeze",
+      "botGather",
+      "botGoHome",
+      "botGroundY",
+      "botInitWant",
+      "botLook",
+      "botNearestFoe",
+      "botPhysics",
+      "botRng",
+      "botStep",
+      "botWalkTo",
+      "bots",
+      "damageBot",
+      "despawnAllBotDrops",
+      "despawnAllBots",
+      "healBot",
+      "killBot",
+      "raycastBot",
+      "spawnBot",
+      "tryAttackAny",
+      "updateBotDrops",
+      "updateBots"
+    ],
+    "imports": {
+      "config": [
+        "BLOCKS",
+        "D",
+        "EYE",
+        "G",
+        "H",
+        "I",
+        "REACH",
+        "attackDamage",
+        "breakTime",
+        "dropCountOf",
+        "dropOf",
+        "isBlockId"
+      ],
+      "audio": [
+        "blip"
+      ],
+      "generate": [
+        "getEffective",
+        "isLiquid",
+        "isSolid",
+        "setBlock"
+      ],
+      "mobs": [
+        "MOB_TYPES",
+        "damageMob",
+        "handSwing",
+        "isNight",
+        "mobs",
+        "rayBox",
+        "raycastMob",
+        "swingT"
+      ],
+      "player": [
+        "moveBodyAxis",
+        "player"
+      ],
+      "survival": [
+        "MODE",
+        "hurt",
+        "invAdd",
+        "mode"
+      ],
+      "actions": [
+        "spawnParticles"
+      ],
+      "input": [
+        "keys"
+      ]
+    }
+  },
+  {
+    "file": "audio.js",
+    "lines": 30,
+    "exports": [
+      "actx",
+      "audio",
+      "blip",
+      "noiseBurst"
+    ],
+    "imports": {}
+  },
+  {
+    "file": "input.js",
+    "lines": 214,
+    "exports": [
+      "SENS",
+      "addLook",
+      "bindStick",
+      "breakHeld",
+      "dragPointerId",
+      "dragging",
+      "endDrag",
+      "input",
+      "keys",
+      "lastAction",
+      "lastMX",
+      "lastMY",
+      "lookVec",
+      "paused",
+      "placeHeld",
+      "placeRepeat",
+      "running",
+      "startDrag",
+      "stickVec",
+      "suppressPlace"
+    ],
+    "imports": {
+      "audio": [
+        "blip"
+      ],
+      "boot": [
+        "bagOpen",
+        "closeBag",
+        "toggleBag"
+      ],
+      "config": [
+        "REACH"
+      ],
+      "loop": [
+        "camEye"
+      ],
+      "actions": [
+        "doBreak",
+        "doPlace"
+      ],
+      "survival": [
+        "HOTBAR_N",
+        "MODE",
+        "cancelDig",
+        "mode",
+        "respawn",
+        "selected"
+      ],
+      "mobs": [
+        "MOB_TYPES",
+        "raycastMob",
+        "spectate"
+      ],
+      "player": [
+        "player"
+      ],
+      "renderer": [
+        "canvas"
+      ],
+      "math": [
+        "clamp"
+      ]
+    }
+  },
+  {
+    "file": "actions.js",
+    "lines": 175,
+    "exports": [
+      "breakBlock",
+      "doBreak",
+      "doBreakTimed",
+      "doPlace",
+      "isBedrock",
+      "particles",
+      "spawnParticles",
+      "targetBlock",
+      "tryIgnite",
+      "trySpawnEgg",
+      "trySummon",
+      "updateParticles"
+    ],
+    "imports": {
+      "audio": [
+        "blip",
+        "noiseBurst"
+      ],
+      "config": [
+        "BLOCKS",
+        "EGG_OF",
+        "H",
+        "I",
+        "ITEMS",
+        "PORTAL_BLOCK",
+        "REACH",
+        "SUMMON_OF"
+      ],
+      "survival": [
+        "MODE",
+        "collectDrop",
+        "heldId",
+        "invCount",
+        "invDirty",
+        "invTake",
+        "mode",
+        "tryEat"
+      ],
+      "input": [
+        "running"
+      ],
+      "player": [
+        "insideSelf",
+        "player",
+        "raycast"
+      ],
+      "dims": [
+        "DIMS",
+        "DIM_N"
+      ],
+      "generate": [
+        "getEffective",
+        "isLiquid",
+        "isSolid",
+        "setBlock"
+      ],
+      "mobs": [
+        "MOB_CAP",
+        "MOB_TYPES",
+        "handSwing",
+        "mobs",
+        "spawnMob",
+        "summonGolem"
+      ],
+      "textures": [
+        "P"
+      ],
+      "portal": [
+        "ignitePortal"
+      ]
+    }
+  },
+  {
+    "file": "loop.js",
+    "lines": 331,
+    "exports": [
+      "camEye",
+      "chunkVisible",
+      "drawLineBox",
+      "extractPlanes",
+      "fps",
+      "fpsAcc",
+      "fpsN",
+      "frame",
+      "frames",
+      "last",
+      "lineLoc",
+      "resize"
+    ],
+    "imports": {
+      "audio": [
+        "blip",
+        "noiseBurst"
+      ],
+      "actions": [
+        "doBreak",
+        "doBreakTimed",
+        "doPlace",
+        "particles",
+        "targetBlock",
+        "updateParticles"
+      ],
+      "post": [
+        "AMBIENT",
+        "FOG_FAR",
+        "FOG_HEIGHT",
+        "FOG_NEAR",
+        "SHADER_T",
+        "SKY",
+        "atlasTex",
+        "composite",
+        "drawArrows",
+        "drawBotDrops",
+        "drawBots",
+        "drawChunkBlend",
+        "drawChunkOpaque",
+        "drawHandView",
+        "drawMobs",
+        "ensureFbos",
+        "lineBuf",
+        "postOK",
+        "runBloom",
+        "sceneFbo",
+        "updateSkyColor",
+        "uploadChunk"
+      ],
+      "fluid": [
+        "updateFluid"
+      ],
+      "bots": [
+        "bots",
+        "tryAttackAny",
+        "updateBotDrops",
+        "updateBots"
+      ],
+      "input": [
+        "addLook",
+        "breakHeld",
+        "input",
+        "lastAction",
+        "lookVec",
+        "paused",
+        "placeHeld",
+        "placeRepeat",
+        "running",
+        "stickVec"
+      ],
+      "portal": [
+        "portalCd",
+        "portalIdInPlayer",
+        "switchDim"
+      ],
+      "config": [
+        "CD",
+        "CW",
+        "D",
+        "EYE",
+        "I",
+        "LAVA_RECT",
+        "PORTAL_DIM",
+        "REACH",
+        "TEXEL",
+        "WATER_RECT"
+      ],
+      "dims": [
+        "dim"
+      ],
+      "math": [
+        "M4",
+        "clamp"
+      ],
+      "renderer": [
+        "canvas",
+        "gl",
+        "locLine",
+        "locMain",
+        "progLine",
+        "progMain"
+      ],
+      "player": [
+        "player",
+        "raycast",
+        "updatePhysics"
+      ],
+      "sky": [
+        "drawSky"
+      ],
+      "mobs": [
+        "MOB_TYPES",
+        "bowCharge",
+        "fireArrow",
+        "handSwing",
+        "spectate",
+        "updateArrows",
+        "updateMobs"
+      ],
+      "survival": [
+        "MODE",
+        "cancelDig",
+        "digProgress",
+        "heldId",
+        "invCount",
+        "invDirty",
+        "invTake",
+        "mode",
+        "updateDig",
+        "updateSurvival"
+      ],
+      "mesher": [
+        "VIEW_CX",
+        "VIEW_CZ",
+        "anchorGX",
+        "anchorGZ",
+        "buildChunk",
+        "chunks",
+        "shiftChunks"
+      ],
+      "boot": [
+        "bagOpen"
+      ],
+      "textures": [
+        "P"
+      ]
+    }
+  },
+  {
+    "file": "boot.js",
+    "lines": 166,
+    "exports": [
+      "bagOpen",
+      "closeBag",
+      "modeBtns",
+      "openBag",
+      "pauseGame",
+      "pickMode",
+      "showDeath",
+      "startGame",
+      "toggleBag"
+    ],
+    "imports": {
+      "mesher": [
+        "buildChunk",
+        "chunks",
+        "initChunks"
+      ],
+      "post": [
+        "updateSkyColor",
+        "uploadAtlas",
+        "uploadBotMesh",
+        "uploadChunk",
+        "uploadDropMesh",
+        "uploadMobMeshes"
+      ],
+      "audio": [
+        "audio",
+        "blip"
+      ],
+      "loop": [
+        "frame",
+        "resize"
+      ],
+      "input": [
+        "breakHeld",
+        "input",
+        "keys",
+        "paused",
+        "placeHeld",
+        "placeRepeat",
+        "running"
+      ],
+      "portal": [
+        "dimSpawn"
+      ],
+      "survival": [
+        "MODE",
+        "cancelDig",
+        "mode",
+        "onDeath",
+        "onHurt",
+        "respawn"
+      ],
+      "config": [
+        "CD",
+        "CW",
+        "D",
+        "I",
+        "W"
+      ],
+      "mobs": [
+        "PASSIVE_TYPES",
+        "bowCharge",
+        "spawnMob",
+        "surfaceY"
+      ],
+      "generate": [
+        "getEffective"
+      ],
+      "player": [
+        "player"
+      ],
+      "fluid": [
+        "findSpawn",
+        "generate"
+      ],
+      "renderer": [
+        "canvas"
+      ],
+      "textures": [
+        "buildAtlas"
+      ],
+      "sky": [
+        "buildCloudTexture"
+      ]
+    }
+  }
+]
