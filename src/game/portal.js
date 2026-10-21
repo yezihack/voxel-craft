@@ -3,8 +3,9 @@
 import { toast } from './uiState.js'
 import { SEED, dim, edits, setColCache, setColCacheSeed, setDim, setEdits, setPortalCd, setSpectate } from './state.js'
 import { blip } from './audio.js'
-import { despawnAllBotDrops, despawnAllBots } from './bots.js'
-import { D, DIM_N, H, I, PORTAL_BLOCK, PW, isPortalBlock } from './config.js'
+import { botPortalId, bots, despawnAllBotDrops, despawnAllBots, rehomeBots } from './bots.js'
+import { despawnAllCarts } from './carts.js'
+import { D, DIM_N, H, I, PORTAL_BLOCK, PORTAL_DIM, PW, isPortalBlock } from './config.js'
 import { DIMS, findDimEntry } from './dims.js'
 import { fluid, fluidActive } from './fluid.js'
 import { dimEdits, getEffective, isSolid, setBlock } from './generate.js'
@@ -77,8 +78,10 @@ export const dimVisited = new Array(DIM_N).fill(false);
 
 
 /* 以 (x,y,z) 为中心的玩家 AABB 里有没有门方块 —— 有就是「站进传送门了」。
- * 做成可传坐标的形式，落点检查（见下）要拿同一套判定去试候选点。 */
-function portalIdInBox(x, y, z) {
+ * 做成可传坐标的形式，落点检查（见下）要拿同一套判定去试候选点。
+ * 导出给 bots.js：AI 玩家的碰撞箱比玩家略窄，但用同一套判定就够了
+ * （差的那几厘米不会改变「人在不在门里」这个结论）。 */
+export function portalIdInBox(x, y, z) {
   const x0 = Math.floor(x - PW), x1 = Math.floor(x + PW - 1e-6);
   const y0 = Math.floor(y),      y1 = Math.floor(y + 1.8 - 1e-6);
   const z0 = Math.floor(z - PW), z1 = Math.floor(z + PW - 1e-6);
@@ -170,6 +173,18 @@ export function buildReturnPortal(backDim) {
 export function switchDim(target, stayAt) {
   if (target === dim || !(target >= 0 && target < DIM_N)) return false;
   const p = player;
+  /* ---- 谁跟你一起过门 ----
+   * AI 玩家**没有维度字段**（见文件头那条说明：实体一律属于当前维度），
+   * 所以「传送」对它来说只有一个可观测的结果：从这一维度消失、在那一维度出现。
+   * 于是这里做的是「记下站在同一扇门里的那几个人 → 清场 → 在落点附近原样放回来」，
+   * 名字、背包、配色全带走，只有 home 重设（旧维度的家没有意义）。
+   *
+   * ⚠ 必须在 setDim **之前**统计：此刻 getEffective 读的还是旧维度的门。 */
+  const travelers = [];
+  for (const b of bots) {
+    const bp = botPortalId(b);
+    if (bp && PORTAL_DIM[bp] === target) travelers.push(b);
+  }
   /* 返程点存「门外侧」的那一格。存在门里的话，下次回来一落地就又踩在门方块上，
    * 冷却（1.4s）一过立刻再传一次 —— 两个维度无限对传就是这么来的。
    * ⚠ 这句必须在 setDim 之前：此刻 getEffective 读的还是旧维度的门。 */
@@ -197,6 +212,9 @@ export function switchDim(target, stayAt) {
    * 地上的掉落物一并清掉：不捡的话，玩家会在新维度里收到旧世界的物资。 */
   despawnAllBots();
   despawnAllBotDrops();
+  /* 矿车同理：它的坐标属于旧维度，而且玩家可能正骑在车上 ——
+   * 不清的话玩家会被一具「旧世界的车」钉在原地。 */
+  despawnAllCarts();
 
   let pos = stayAt || dimReturnPos[dim] || findDimEntry(dim);
   if (!pos) pos = [0.5, 20, 0.5];
@@ -218,9 +236,17 @@ export function switchDim(target, stayAt) {
     dimVisited[dim] = true;
     back = buildReturnPortal(from);
   }
+  /* 跟着过门的人落地。放在最后：落点 pos 是**新维度**的坐标，
+   * 这时 getEffective 读到的才是新维度的地形，botGroundY 才找得对地面。 */
+  const arrived = rehomeBots(travelers, pos[0], pos[1], pos[2]);
+
   const D = DIMS[dim];
   if (typeof blip === 'function') blip(520, 0.26, 'sine', 0.06);
-  if (typeof toast === 'function')
-    toast(D.icon + ' 已进入「' + D.name + '」' + (back ? '' : ' · 记得自己搭一扇回程门'));
+  if (typeof toast === 'function') {
+    let msg = D.icon + ' 已进入「' + D.name + '」';
+    if (arrived) msg += ' · ' + arrived + ' 位 AI 玩家跟着过来了';
+    else if (!back) msg += ' · 记得自己搭一扇回程门';
+    toast(msg);
+  }
   return true;
 }

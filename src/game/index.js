@@ -18,8 +18,8 @@ export { setTagHook, ui } from './uiState.js'
 /* 界面动作 */
 export {
   clearCraftAll, clearCraftSlot, clickInvSlot, closeBag, pickLibraryItem, pickMode,
-  pickRecipe, respawnAndStart, selectSlot, setInputKey, setLook, setStick, startGame,
-  takeCraftResult, toggleBagExpand, toggleFly,
+  pickRecipe, pickWorldType, respawnAndStart, selectSlot, setInputKey, setLook,
+  setStick, startGame, takeCraftResult, toggleBagExpand, toggleFly,
 } from './uiActions.js'
 
 /* 派生数据 */

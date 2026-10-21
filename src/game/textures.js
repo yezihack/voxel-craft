@@ -674,7 +674,110 @@ export const TILE_GEN = {
   portal_blight:  (s, c) => portalTile(s, c),
   portal_dune:    (s, c) => portalTile(s, c),
   portal_garden:  (s, c) => portalTile(s, c),
+
+  /* ---------------- 机制方块 ----------------
+   * ⚠ 火把 / 铁轨 / 传送板是**带镂空**的：周围必须留透明（不调用 P 即可），
+   *   由 shader 的 `uCutout → discard` 裁掉。写成整张不透明贴图的话，
+   *   十字薄片会渲染成一块实心方板，火把看起来就是「悬空的木头方块」。 */
+  torch:   (s, c) => torchTile(s, c, [246, 206, 132], [246, 148, 52]),
+  torch_red: (s, c) => torchTile(s, c, [252, 132, 120], [226, 62, 62]),
+  redstone_block(s, c) {
+    noiseTile(s, c, 7, 0.03);                       // 红石底 + 细噪点
+    const line = shade(c, 62);
+    for (let i = 2; i < TP; i += 6) {               // 纵横电路走线
+      for (let x = 1; x < TPM; x++) { P(x, i, line); P(i, x, line); }
+    }
+    for (let gy = 4; gy < TP; gy += 12)             // 结点：亮芯 + 暗边
+      for (let gx = 4; gx < TP; gx += 12) {
+        for (let dy = 0; dy < 3; dy++) for (let dx = 0; dx < 3; dx++)
+          P(gx + dx, gy + dy, dx === 1 && dy === 1 ? shade(c, 120) : shade(c, -60));
+      }
+  },
+  rail: (s, c) => railTile(s, c, [186, 178, 162]),
+  rail_powered: (s, c) => railTile(s, c, [238, 196, 84], [222, 132, 40]),
+  belt(s, c) {
+    noiseTile(s, c, 6, 0);                          // 橡胶带面
+    const seam = shade(c, -34);
+    for (let y = 0; y < TP; y += 8) for (let x = 0; x < TP; x++) P(x, y, seam);
+    /* 人字箭头：只朝一个方向，视觉上暗示「这条带子在往那边推」。
+     * 真正的方向存在 beltDir 表里（放置时的朝向），贴图只是给个读得懂的暗示。 */
+    const mark = shade(c, 74);
+    for (let y = 2; y < TP; y += 8) {
+      const yy = y + 3;
+      for (let i = 0; i <= 4; i++) { P(TPH - 4 + i, yy - i, mark); P(TPH + 4 - i, yy - i, mark); }
+    }
+  },
+  pad(s, c) {
+    const man = (x, y) => Math.max(Math.abs(x - (TPH - 0.5)), Math.abs(y - (TPH - 0.5)));
+    for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++) {
+      const d = man(x, y);
+      if (d > TPH - 2) continue;                    // 四角留空（圆角方板）
+      P(x, y, shade(c, d > TPH - 4 ? -70 : (hash2(x, y, s) - 0.5) * 12));
+    }
+    for (let i = 0; i < TP; i++) {                  // 外圈符文环
+      const o = TPH - 4;
+      P(o, i, shade(c, 90)); P(TP - 1 - o, i, shade(c, 90));
+      P(i, o, shade(c, 90)); P(i, TP - 1 - o, shade(c, 90));
+    }
+    for (let y = TPH - 3; y <= TPH + 2; y++)        // 中心的传送眼
+      for (let x = TPH - 3; x <= TPH + 2; x++) {
+        const dx = x - (TPH - 0.5), dy = y - (TPH - 0.5);
+        if (dx * dx + dy * dy < 9) P(x, y, shade(c, 130));
+      }
+  },
+  /* 矿车车身：金属板 + 铆钉。整张不透明 —— 它是实体网格，不走镂空。 */
+  cart_metal(s, c) {
+    for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++)
+      P(x, y, shade(c, (hash2(x >> 1, y >> 1, s) - 0.5) * 16 - (y > TP - 4 ? 26 : 0)));
+    for (const rx of [4, TPM - 4]) for (const ry of [4, TPM - 4]) {   // 四角铆钉
+      P(rx, ry, shade(c, 40)); P(rx + 1, ry, shade(c, -40));
+      P(rx, ry + 1, shade(c, -40));
+    }
+  },
 };
+
+/* 火把：一根木柄 + 顶上的火苗，四周留透明。
+ * ⚠ 坐标全部按 TP 的比例算（TPH / TPM），不许出现裸的 16 —— 那些数字是
+ *   16 像素时代的遗留，贴图边长改了就会把柄画到格子外面去。 */
+export function torchTile(s, c, flame, hot) {
+  const wood = [138, 100, 62];
+  const x0 = TPH - 1, x1 = TPH + 1;
+  const y0 = Math.round(TP * 0.44), y1 = TPM - 3;
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++)
+    P(x, y, shade(wood, (hash2(x, y, s) - 0.5) * 20 - (x === x0 ? 18 : x === x1 ? 8 : 0)));
+  const top = Math.round(TP * 0.08);
+  for (let i = 0; i < 9; i++) {                     // 火苗：上尖下宽的 9 层锥
+    const t = i / 8;
+    const yy = Math.round(top + t * (y0 - top));
+    const w = Math.round(t * 3.4);
+    for (let x = TPH - w; x <= TPH + w; x++)
+      P(x, yy, Math.abs(x - TPH) >= w ? hot : (t > 0.5 ? flame : shade(flame, 40)));
+  }
+}
+
+/* 铁轨：画成**十字道口**（两条轨道交叉）—— 方块 id 不带朝向，
+ * 与其猜一个方向画错，不如画成四向通用，玩家看到的永远是「这里能跑车」。 */
+export function railTile(s, c, metal, glow) {
+  const dk = shade(metal, -66), lt = shade(metal, 46);
+  const sleepers = [104, 82, 58];                   // 枕木
+  for (let k = 0; k < 4; k++) {                     // 横向枕木
+    const y0 = 3 + k * 8;
+    for (let y = y0; y < y0 + 3; y++) for (let x = 4; x <= TPM - 4; x++)
+      P(x, y, shade(sleepers, (hash2(x, y, s) - 0.5) * 18));
+  }
+  for (let y = 0; y < TP; y++) {                    // 纵向两条轨
+    P(TPH - 5, y, dk); P(TPH - 4, y, lt);
+    P(TPH + 4, y, lt); P(TPH + 5, y, dk);
+  }
+  for (let x = 0; x < TP; x++) {                    // 横向两条轨（交叉成道口）
+    P(x, TPH - 5, dk); P(x, TPH - 4, lt);
+    P(x, TPH + 4, lt); P(x, TPH + 5, dk);
+  }
+  if (glow) for (let y = 0; y < TP; y++) {          // 充能轨：轨心点亮一条
+    P(TPH, y, glow); P(TPH - 1, y, glow);
+    P(y, TPH, glow); P(y, TPH - 1, glow);
+  }
+}
 
 /* 传送门贴图：以格心为原点的三臂旋涡 —— 极角方向三圈、径向从亮到暗，
  * 再压暗最外一圈当作「门框」。8 种门共用这一张画法，只换基色。 */
@@ -944,6 +1047,44 @@ export function dimCoreIcon(s, c) {
   PQ(4, 4, shade(c, 72)); PQ(5, 4, shade(c, 72)); PQ(4, 5, shade(c, 72));
 }
 
+/* 矿车图标：一只敞口车厢 + 两个轮子 + 底下一段轨，走 PQ/PL 的 16×16 逻辑格。
+ * 车厢画成「上宽下窄」的斗形，轮子压在车底 —— 光一个方块认不出是车。 */
+export function cartIcon(c) {
+  const dk = shade(c, -70), lt = shade(c, 52);
+  for (let y = 5; y <= 11; y++) {                          // 斗形车厢
+    const inset = y < 8 ? (11 - y) : 0;
+    for (let x = 3 + inset; x <= 12 - inset; x++) {
+      if (y === 5) { PQ(x, y, lt); continue; }             // 上沿受光
+      PQ(x, y, shade(c, (hash2(x, y, 7) - 0.5) * 18));
+    }
+  }
+  PL(3, 5, 3, 11, dk); PL(12, 5, 12, 11, dk); PL(3, 11, 12, 11, dk);
+  for (const wx of [5, 10]) {                              // 轮子
+    PQ(wx, 12, dk); PQ(wx + 1, 12, dk); PQ(wx, 13, dk); PQ(wx + 1, 13, dk);
+    PQ(wx, 12, shade(c, -20));
+  }
+  PL(2, 14, 13, 14, [150, 142, 126]);                      // 脚下那段轨
+  PL(2, 15, 13, 15, shade(c, -90));
+}
+
+/* 传送珠图标：一颗发光宝珠 + 四道放射光。紫色和维度核心同色系，
+ * 所以刻意用「圆 + 十字星芒」和核心的「菱形 + 同心环」拉开距离。 */
+export function blinkIcon(s, c) {
+  const cx = 7.5, cy = 8.5, R = 5.2;
+  for (let y = 2; y <= 14; y++) for (let x = 2; x <= 14; x++) {
+    const dx = x - cx, dy = y - cy, d = Math.sqrt(dx * dx + dy * dy);
+    if (d > R) continue;
+    const hl = dx + dy < -2.4;
+    PQ(x, y, hl ? shade(c, 78) : shade(c, d > R - 1.2 ? -64 : (hash2(x, y, s) - 0.5) * 16));
+  }
+  for (const [ox, oy] of [[0, -1], [0, 1], [-1, 0], [1, 0]])    // 四向星芒
+    for (let k = 1; k <= 3; k++) {
+      const px = Math.round(cx + ox * (R + k)), py = Math.round(cy + oy * (R + k));
+      if (px >= 1 && px <= 14 && py >= 1 && py <= 14) PQ(px, py, shade(c, 96 - k * 22));
+    }
+  PQ(6, 7, shade(c, 130)); PQ(7, 7, shade(c, 130)); PQ(6, 8, shade(c, 130));
+}
+
 /* 刷怪蛋图标：一枚带斑点的卵形壳。
  * 颜色 = 该生物的标志色（ITEMS[id].color），所以一排蛋能按色相认出谁是谁；
  * 壳面留一块左上高光、再撒几粒深色斑点，和方块/工具图标放一起一眼能认出是「蛋」。
@@ -973,6 +1114,10 @@ export function itemTile(name, s, c) {
   const m = /^item_(pick|axe|shovel|sword)_/.exec(name);
   if (m) return toolIconTile(m[1], c);
   if (name === 'item_bow' || name === 'item_arrow' || name === 'item_stick') return propIconTile(name, c);
+  /* --- 运输：矿车 / 传送珠 ---
+   * 同样必须单开一支：掉进下面「肉」兜底分支的话，矿车会画成一块生肉。 */
+  if (name === 'item_minecart') return cartIcon(c);
+  if (name === 'item_blink') return blinkIcon(s, c);
   /* --- 刷怪蛋：卵形壳。必须单开一支，否则掉进下面「肉」兜底、13 枚全像猪排。 --- */
   if (/^item_egg_\w+$/.test(name)) return eggIconTile(s, c);
   /* --- 傀儡核心：一枚带「发光眼」的圆角方块 ---

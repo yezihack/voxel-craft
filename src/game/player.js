@@ -1,6 +1,6 @@
 /* 玩家：AABB 碰撞、重力 / 跳跃 / 飞行、射线拾取 —— 迁移自 voxel-craft.html 第 5481-5652 行 */
 
-import { MODE, dim, mode, spectate } from './state.js'
+import { MODE, dim, mode, rideCart, spectate } from './state.js'
 import { BLOCKS, EYE, G, I, JUMP_V, PW } from './config.js'
 import { DIMS } from './dims.js'
 import { getEffective, isLiquid, isSolid } from './generate.js'
@@ -56,6 +56,15 @@ export function moveAxis(axis, amount) { return moveBodyAxis(player, PW, 1.8, ax
 
 export function updatePhysics(dt, input) {
   const p = player;
+  /* 骑在矿车上时**整段物理让给车**：位置、朝向都由 carts.js 驱动。
+   * 这里如果照旧跑一遍重力与 AABB，人会被车推着撞墙、还会不停往下滑
+   * ——车在动、人在原地被反复校正，看起来就是「车上的人在抽搐」。 */
+  if (rideCart) {
+    player.x = rideCart.x; player.z = rideCart.z; player.y = rideCart.y + 0.05;
+    player.vx = player.vy = player.vz = 0;
+    player.onGround = true;
+    return;
+  }
   // 流体判定：脚部与头部各取一次，任一为水/岩浆都算浸泡
   const fx = Math.floor(p.x), fz = Math.floor(p.z);
   const feetId = getEffective(fx, Math.floor(p.y + 0.9), fz);

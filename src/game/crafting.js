@@ -186,6 +186,25 @@ export const RECIPES = [
   { out: I.EGG_SKELETON,    n: 1, grid: ['WW', 'Wn'] },   // 骨头   → 骷髅
   { out: I.EGG_SLIME_LARGE, n: 1, grid: ['WW', 'Ws'] },   // 粘液球 → 史莱姆
   { out: I.EGG_SLIME_SMALL, n: 1, grid: ['WW', 'WF'] },   // 树叶   → 小史莱姆
+
+  /* ---------------- 光源 / 红石 / 轨道 / 运输 ----------------
+   * 形状沿用的是「一看就懂」的那套：火把 = 燃料在上、柄在下；
+   * 铁轨 = 两条轨夹一根枕木（竖着看是「R 空 R / R 棍 R / R 空 R」）；
+   * 矿车 = 一个开口朝上的斗（上排空一格 = 斗口）。
+   *
+   * ⚠ 逐条核对过与既有配方**不同形或不同料**：
+   *   红石块(TTT×3) 是唯一的满 3×3；充能铁轨(OTO/TJT/OTO) 带金；
+   *   传送带(CC/JJ) 与苔石(CC/CC) 只差底下那排；传送板(GGG/TQT/GGG) 与
+   *   傀儡核心(RRR/RUR/RRR) 形状相同但材料完全不同 —— 匹配按材料逐格比，不会串。 */
+  { out: I.TORCH,          n: 4, grid: ['K', 'J'] },                 // 煤 + 木棍 → 4 火把
+  { out: I.TORCH_RED,      n: 4, grid: ['T', 'J'] },                 // 红石 + 木棍 → 4 红石火把
+  { out: I.REDSTONE_BLOCK, n: 1, grid: ['TTT', 'TTT', 'TTT'] },      // 9 红石 → 红石块
+  { out: I.RAIL,           n: 8, grid: ['R R', 'RJR', 'R R'] },      // 4 铁 + 木棍 → 8 铁轨
+  { out: I.RAIL_POWERED,   n: 4, grid: ['OTO', 'TJT', 'OTO'] },      // 金 + 红石 + 木棍 → 充能轨
+  { out: I.BELT,           n: 4, grid: ['CC', 'JJ'] },               // 圆石 + 木棍 → 4 传送带
+  { out: I.PAD,            n: 2, grid: ['GGG', 'TQT', 'GGG'] },      // 玻璃 + 红石 + 石英 → 2 传送板
+  { out: I.MINECART,       n: 1, grid: ['R R', 'RRR'] },             // 5 铁 → 矿车
+  { out: I.BLINK,          n: 2, grid: ['QQQ', 'QTQ', 'QQQ'] },      // 石英壳 + 红石芯 → 2 传送珠
 ];
 
 /* 把配方网格规整成 3×3 的 id 矩阵（不足补 0） */

@@ -4,15 +4,17 @@ import { MODE, bowCharge, breakHeld, dim, handSwing, lastAction, lookVec, mode, 
 import { doBreak, doBreakTimed, doPlace, particles, updateParticles } from './actions.js'
 import { blip, noiseBurst } from './audio.js'
 import { bots, tryAttackAny, updateBotDrops, updateBots } from './bots.js'
+import { updateCarts } from './carts.js'
 import { CD, CW, D, EYE, I, LAVA_RECT, PORTAL_DIM, REACH, TEXEL, WATER_RECT } from './config.js'
 import { updateFluid } from './fluid.js'
+import { applyBelts, tickBlink, updatePads } from './transport.js'
 import { addLook, input } from './input.js'
 import { M4, clamp } from './math.js'
 import { VIEW_CX, VIEW_CZ, anchorGX, anchorGZ, buildChunk, chunks, shiftChunks } from './mesher.js'
 import { MOB_TYPES, fireArrow, updateArrows, updateMobs } from './mobs.js'
 import { player, raycast, updatePhysics } from './player.js'
 import { portalIdInPlayer, switchDim } from './portal.js'
-import { AMBIENT, FOG_FAR, FOG_HEIGHT, FOG_NEAR, SHADER_T, SKY, atlasTex, composite, drawArrows, drawBotDrops, drawBots, drawChunkBlend, drawChunkOpaque, drawHandView, drawMobs, ensureFbos, lineBuf, postOK, runBloom, sceneFbo, updateSkyColor, uploadChunk } from './post.js'
+import { AMBIENT, FOG_FAR, FOG_HEIGHT, FOG_NEAR, SHADER_T, SKY, atlasTex, composite, drawArrows, drawBotDrops, drawBots, drawCarts, drawChunkBlend, drawChunkOpaque, drawHandView, drawMobs, ensureFbos, lineBuf, postOK, runBloom, sceneFbo, updateSkyColor, uploadChunk } from './post.js'
 import { canvas, gl, locLine, locMain, progLine, progMain } from './renderer.js'
 import { drawSky } from './sky.js'
 import { cancelDig, digProgress, heldId, invCount, invTake, updateDig, updateSurvival } from './survival.js'
@@ -122,6 +124,12 @@ export function frame(now) {
     updateMobs(dt);
     updateBots(dt);          // AI 玩家（在 updateMobs 之后：敌人刚死它就不用再打了）
     updateBotDrops(dt);
+    /* 运输装置必须排在**所有实体推进之后**：传送带按位移推人推怪，
+     * 先移动再推，这一帧的最终位置才是对的（反过来会慢一帧、且贴墙时抖动）。 */
+    updateCarts(dt);
+    applyBelts(dt);
+    updatePads(dt);
+    tickBlink(dt);
     updateParticles(dt);
     updateArrows(dt);
     updateFluid(dt);          // 水/液体的流动（按固定周期推进，与帧率解耦）
@@ -257,6 +265,8 @@ export function frame(now) {
   drawArrows();
   // 2d) AI 玩家掉在地上的物资
   drawBotDrops();
+  // 2e) 矿车（不透明实体，和掉落物同一趟）
+  drawCarts();
 
   // 3) 选中方块高亮 + 粒子
   gl.useProgram(progLine);

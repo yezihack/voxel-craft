@@ -8,7 +8,9 @@ import { getEffective, isLiquid, isSolid, setBlock } from './generate.js'
 import { keys } from './input.js'
 import { MOB_TYPES, damageMob, isNight, mobs, rayBox, raycastMob } from './mobs.js'
 import { moveBodyAxis, player } from './player.js'
+import { portalIdInBox } from './portal.js'
 import { hurt, invAdd } from './survival.js'
+import { toast } from './uiState.js'
 
 /* ============================== AI 玩家 ==============================
  * 一群「行为像玩家」的 NPC：会走会跳、会挖方块采集、会放方块盖房、
@@ -602,6 +604,16 @@ export function updateBots(dt) {
   for (let i = bots.length - 1; i >= 0; i--) {
     const b = bots[i];
     if (b.dead) { bots.splice(i, 1); continue; }
+    /* 走进传送门的：他过门去了另一个维度 —— 从这一侧看就是消失。
+     * 给一小簇粒子 + 一句话，否则人会「凭空不见」，玩家会以为是 bug。
+     * （跟着玩家一起过门的情况由 switchDim 的 rehomeBots 处理，
+     *   那里已经把人挪走了，这里不会再遇到他们。） */
+    if (botPortalId(b)) {
+      spawnParticles(b.x, b.y + 0.9, b.z, [150, 110, 246]);
+      if (typeof toast === 'function') toast('🌀 ' + b.name + ' 走进了传送门');
+      bots.splice(i, 1);
+      continue;
+    }
     if (Math.hypot(b.x - player.x, b.z - player.z) > BOT_KEEP) bots.splice(i, 1);
   }
   // 2) 人数不足就补人。补在玩家背后 —— 正对着冒出来会像作弊刷怪
@@ -623,6 +635,56 @@ export function updateBots(dt) {
 
 /* 切维度 / 切模式时清场：AI 玩家带着「家」和背包，跨维度搬家不合理。 */
 export function despawnAllBots() { bots.length = 0; }
+
+/* ---------------- AI 玩家与传送门 ----------------
+ * 这一段回答的是「为什么 AI 玩家走进传送门不会被传送」——
+ * 因为**实体没有维度字段**：bots / mobs / arrows 全部隐式属于「当前维度」，
+ * getEffective() 读的也是当前维度。一个人的坐标 (x,y,z) 在八个维度里各指一处地形，
+ * 光靠坐标根本表达不了「他在熔火之心」——所以「AI 玩家去了别的维度」
+ * 在这套架构里只有一个可观测结果：**从当前维度消失**。
+ *
+ * 于是分两种情况处理，两边都是这个结论的诚实表达：
+ *   ① 玩家正在过同一扇门（switchDim）→ 把他记为「随行者」，到落点附近原样放回来
+ *   ② 他自己晃进了门（updateBots）   → 当场消失：他真的过门去了，只是你没跟着
+ * 早先这两种情况都是「什么都没发生」（人站在门里继续挖矿），
+ * 看着就像传送门对 AI 玩家无效 —— 实际是根本没有这一层判定。 */
+
+/* 这个人的碰撞箱里有门方块吗？返回门方块 id（0 = 没在门里）。
+ * 用玩家的同一套盒判定：BOT_W(0.6) 与玩家 PW*2(0.6) 等宽，高度也几乎一样。 */
+export function botPortalId(b) {
+  return portalIdInBox(b.x, b.y, b.z);
+}
+
+/* 把一批「随行者」在 (cx, cz) 附近放回来，返回真正落地的人数。
+ * ⚠ 落地半径刻意给到 5~12 格：太近的话会直接落在刚生成的回程门上，
+ *   下一帧又被判定「在门里」而消失，玩家看到的是「人跟过来了又立刻没了」。 */
+export function rehomeBots(list, cx, cy, cz) {
+  bots.length = 0;
+  let n = 0;
+  for (const b of list) {
+    let placed = false;
+    for (let i = 0; i < 8 && !placed; i++) {
+      const a = botRng() * Math.PI * 2, r = 5 + botRng() * 7;
+      const x = Math.floor(cx + Math.cos(a) * r), z = Math.floor(cz + Math.sin(a) * r);
+      const gy = botGroundY(x, z, Math.floor(cy));
+      if (gy < 0) continue;
+      b.x = x + 0.5; b.y = gy; b.z = z + 0.5;
+      placed = true;
+    }
+    if (!placed) continue;             // 新维度这一带没有地面 → 就当没跟过来
+    b.vx = b.vy = b.vz = 0;
+    b.onGround = false;
+    /* 家、采集目标、挖掘进度全部作废：它们记的是**旧维度**的坐标，
+     * 留着的话人会朝着一个不存在的点走（在虚空维度还会直接走出岛外）。 */
+    b.home = [b.x, b.y, b.z];
+    b.goal = null; b.target = null; b.foe = null;
+    b.digT = 0; b.digId = 0;
+    b.state = 'idle'; b.stateT = 0; b.think = 0.2;
+    bots.push(b);
+    n++;
+  }
+  return n;
+}
 
 /* 射线打 AI 玩家（玩家左键能打他们）。返回 { bot, dist } 或 null。 */
 export function raycastBot(ox, oy, oz, dx, dy, dz, maxD) {

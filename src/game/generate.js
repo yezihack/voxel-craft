@@ -1,11 +1,11 @@
 /* 世界生成入口：generate() / getEffective / setBlock / isSolid —— 迁移自 voxel-craft.html 第 1862-1951 行 */
 
-import { dim, edits, setEdits } from './state.js'
+import { dim, edits, flatWorld, setEdits } from './state.js'
 import { BLOCKS, DIM_N, H, I, SEA, SOLID } from './config.js'
 import { decoAt, dimBlockAt, stoneAt, structBlockAt, subsoilOf, surfaceBlockOf, treeBlockAt } from './dims.js'
 import { fluid, fluidWake } from './fluid.js'
 import { dirtyChunkOf } from './mesher.js'
-import { BEDROCK_Y, BIOME, colInfo } from './world.js'
+import { BEDROCK_Y, BIOME, colInfo, FLAT_H } from './world.js'
 
 /* ============================== 生成入口 ==============================
  * getBlock 就是「世界长什么样」的唯一真相。 */
@@ -16,6 +16,18 @@ export function getBlock(x, y, z) {
   if (dim !== 0) return dimBlockAt(dim, xi, yi, zi);
   if (yi < 0) return 3;                 // 世界底部视为实心，防止从下方掉出
   if (yi >= H) return 0;                // 上方是天空
+
+  /* 超平坦：地表以上一律空气，地表以下只按深度分层。
+   * 结构和树**必须整段跳过** —— 村庄的选址判据是「九点高度极差 ≤ 4」，
+   * 在绝对平的图上每格都成立，于是每隔 96 格就冒出一座村庄、连成一片，
+   * 那就不是超平坦而是「超城市」了。石层照旧（矿脉还在，平坦不等于挖不到东西）。 */
+  if (flatWorld) {
+    if (yi > FLAT_H) return 0;
+    if (yi === FLAT_H) return I.GRASS;
+    if (yi > FLAT_H - 4) return I.DIRT;
+    if (yi === BEDROCK_Y) return I.OBSIDIAN;
+    return stoneAt(xi, yi, zi);
+  }
 
   const info = colInfo(xi, zi);
   const h = info.height;

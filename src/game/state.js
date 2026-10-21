@@ -38,6 +38,18 @@ export function setPortalCd(v) { portalCd = v; }
 export let spectate = null;
 export function setSpectate(v) { spectate = v; }
 
+/* 玩家正骑着的矿车；null = 没在车上。
+ * 放在 state.js（而不是 carts.js）是为了避开 player ↔ carts 的循环引用：
+ * player.js 要在 updatePhysics 开头读它，carts.js 要在上下车时写它，
+ * 两边都只依赖这个纯数据叶模块。 */
+export let rideCart = null;
+export function setRideCart(v) { rideCart = v; }
+
+/* 世界类型：false = 经典起伏地形，true = 超平坦（地表恒高、无结构无树）。
+ * 只在 dim === 0 生效（异界有自己的生成器），换这个值必须清列缓存并重建区块。 */
+export let flatWorld = false;
+export function setFlatWorld(v) { flatWorld = v; }
+
 /* 弓蓄力 0..1，界面用它画蓄力条 */
 export let bowCharge = 0;
 export function setBowCharge(v) { bowCharge = v; }

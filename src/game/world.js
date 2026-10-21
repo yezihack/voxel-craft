@@ -1,6 +1,6 @@
 /* 世界数据：地形列缓存、生物群系、地表高度 —— 迁移自 voxel-craft.html 第 1258-1352 行 */
 
-import { SEED, colCache, colCacheSeed, dim, setColCache, setColCacheSeed } from './state.js'
+import { SEED, colCache, colCacheSeed, dim, flatWorld, setColCache, setColCacheSeed } from './state.js'
 import { H, SEA } from './config.js'
 import { dimColInfo } from './dims.js'
 import { clamp, fbm } from './math.js'
@@ -59,8 +59,18 @@ export function colInfo(x, z) {
   return info;
 }
 
+/* 超平坦世界的地表高度。
+ * ⚠ 必须**高于 SEA**：主世界的填水规则是 `h < SEA && y <= SEA → 水`，
+ *   取低了整张图会直接被水淹掉（平坦 + 海平面 = 一片汪洋，什么都看不到）。
+ *   SEA + 2 刚好让地表高出海平面一格多，水线在视野之外。 */
+export const FLAT_H = SEA + 2;
+
 /* 主世界的列信息（原 colInfo 本体，逐字未动） */
 export function overColInfo(x, z) {
+  /* 超平坦：整张图一个高度、一个群系。必须在**噪声之前**提前返回 ——
+   * 否则算出来的噪声被丢掉只是浪费，更糟的是一旦哪天改成「算完再覆盖」，
+   * 列缓存里的旧值可能来自另一套参数。 */
+  if (flatWorld) return { height: FLAT_H, bio: BIOME.PLAIN };
   // 大陆起伏 + 细节 + 山脊（与旧模板同一套参数，保证地形手感不变）
   const base = fbm(x * 0.018, z * 0.018, SEED, 4);
   const detail = fbm(x * 0.075, z * 0.075, SEED + 501, 3);

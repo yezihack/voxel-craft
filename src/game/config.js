@@ -192,9 +192,39 @@ BLOCKS.forEach((b, i) => {
 export const isGlyphBlock = (id) => GLYPH_LETTER[id] !== undefined;
 export const GLYPH_CHARS = Object.keys(GLYPH_BLOCK);
 
+/* ---------------- 机制方块：光源 / 红石 / 轨道 / 运输 ----------------
+ * 这一组是**非立方**与**带状态**的方块，比上面那些纯建材多两个字段：
+ *   shape  : 'cross' 十字薄片（火把）/ 'plate' 贴地薄板（铁轨、传送板）。
+ *            缺省是整立方。几何在 mesher.js 里按 shape 分支产出，见那里。
+ *   solid  : false = 不参与碰撞。火把/铁轨/传送板都是「能走过去」的装饰件，
+ *            人踩的是它们下面那一格 —— 做成实体会变成一格看不见的墙。
+ *   cutout : 贴图带镂空 → 材质走 MAT_FOLIAGE，由 shader 的 discard 裁掉透明纹素。
+ *            没这个标志，薄片会渲染成一整块不透明的方板。
+ *   power  : 红石源强度（红石块 2 = 强电，红石火把 1 = 弱电），充能铁轨靠它判供电。
+ *   rail / belt / pad : 各自的语义标记，逻辑只认标记不认 id（见 carts.js / transport.js）。 */
+BLOCKS.push(
+  { name:'火把', n:'炬', top:[246,206,132], side:[208,164,104], bot:[208,164,104],
+    hard:.10, light:1, solid:false, cutout:true, shape:'cross', tex:'torch' },
+  { name:'红石火把', n:'红', top:[252,120,110], side:[214, 74, 62], bot:[214, 74, 62],
+    hard:.10, light:1, solid:false, cutout:true, shape:'cross', power:1, tex:'torch_red' },
+  { name:'红石块', n:'电', top:[214, 52, 46], side:[206, 46, 40], bot:[198, 40, 34],
+    hard:1.20, power:2, tex:'redstone_block' },
+  { name:'铁轨', n:'轨', top:[176,168,152], side:[168,160,144], bot:[160,152,136],
+    hard:.35, solid:false, cutout:true, shape:'plate', rail:1, tex:'rail' },
+  { name:'充能铁轨', n:'充', top:[226,186, 84], side:[218,176, 76], bot:[208,166, 68],
+    hard:.35, solid:false, cutout:true, shape:'plate', rail:1, poweredRail:1, tex:'rail_powered' },
+  { name:'传送带', n:'带', top:[ 74, 78, 88], side:[ 62, 66, 76], bot:[ 52, 56, 64],
+    hard:.90, belt:1, tex:'belt' },
+  { name:'传送板', n:'板', top:[132,224,248], side:[110,198,236], bot:[ 92,170,214],
+    hard:.60, light:1, solid:false, cutout:true, shape:'plate', pad:1, tex:'pad' },
+);
+
 export const SOLID = {};                    // id → 是否实体
-/* 传送门不参与碰撞（portal:true）—— 不然玩家会站在自己的门板上，走不进另一个维度 */
-BLOCKS.forEach((b, i) => { if (b) SOLID[i] = !b.liquid && !b.portal; });
+/* 传送门不参与碰撞（portal:true）—— 不然玩家会站在自己的门板上，走不进另一个维度。
+ * solid:false 同理（火把/铁轨/传送板是贴在地面上的薄片，不该挡路）。
+ * ⚠ 这里用 `b.solid !== false` 而不是 `b.solid`：字段缺省的方块才是实体，
+ *   写成 `b.solid` 会把上面整张建材表判成非实体，整个世界的碰撞全没了。 */
+BLOCKS.forEach((b, i) => { if (b) SOLID[i] = !b.liquid && !b.portal && b.solid !== false; });
 
 /* ---------------- 贴图集规划 ----------------
  * 每个方块三类面（顶/侧/底）各需要一个贴图名。这里在**载入期**把用到的名字
@@ -367,6 +397,9 @@ export const I = {
   /* 异界地形方块 */
   BASALT: ID['玄武岩'], ENDSTONE: ID['末地石'], CRYSTAL: ID['晶簇岩'],
   MUSHROOM: ID['蘑菇块'], TOXIC: ID['毒沼'],
+  /* 机制方块（光源 / 红石 / 轨道 / 运输） */
+  TORCH: ID['火把'], TORCH_RED: ID['红石火把'], REDSTONE_BLOCK: ID['红石块'],
+  RAIL: ID['铁轨'], RAIL_POWERED: ID['充能铁轨'], BELT: ID['传送带'], PAD: ID['传送板'],
 };
 /* 名字写错会静默拿到 undefined —— 早失败早发现 */
 for (const k in I) if (I[k] === undefined) throw new Error('方块别名未定义: ' + k);
@@ -417,6 +450,8 @@ Object.assign(I, {
   EGG_VILLAGER: 248, EGG_GOLEM_IRON: 249, EGG_GOLEM_STONE: 250, EGG_GOLEM_SNOW: 251,
   EGG_SPIDER: 252, EGG_CREEPER: 253, EGG_SKELETON: 254, EGG_SLIME_LARGE: 255,
   EGG_SLIME_SMALL: 256,
+  /* 运输物品：257 矿车（右键放在铁轨上）、258 传送珠（右键短距瞬移） */
+  MINECART: 257, BLINK: 258,
 });
 
 /* 物品表（非方块）：食物等，右键使用。
@@ -511,6 +546,14 @@ export const ITEMS = {
   254: { name:'骷髅刷怪蛋',   n:'蛋', color:[212,208,196], spawn:'skeleton',    tex:'egg_skeleton' },
   255: { name:'史莱姆刷怪蛋', n:'蛋', color:[108,188,114], spawn:'slime_large', tex:'egg_slime_large' },
   256: { name:'小史莱姆刷怪蛋', n:'蛋', color:[138,208,144], spawn:'slime_small', tex:'egg_slime_small' },
+
+  /* ---------------- 运输 ----------------
+   * 矿车：右键点在**铁轨**上生成一辆（不是放到相邻格），走的是 tryPlaceCart。
+   * 传送珠：右键瞬移到准星落点（站得住才传），走的是 tryBlink。
+   * 两者都不是「放到相邻格」语义，所以不能靠 doPlace 的通用分支，
+   * 必须在那里先按 id 分派（见 actions.js）。 */
+  257: { name:'矿车',   n:'车', color:[176,180,190], tex:'minecart' },
+  258: { name:'传送珠', n:'珠', color:[136, 92,236], tex:'blink' },
 };
 for (const k in ITEMS) ITEMS[k].id = +k;
 /* 维度号 → 核心物品 id。建在 ITEMS 之后（要读 core 字段），
@@ -576,6 +619,11 @@ for (const n in MOB_TILE_COLORS) {
   registerTile(n, null);
   TILE_COLOR[n] = MOB_TILE_COLORS[n];
 }
+/* 矿车贴图也是「实体的皮」，和 mob_* 同一类：不挂在方块上，得单独登记。
+ * ⚠ 漏了这句的话 TILE_INDEX['cart_metal'] 是 undefined，boxGeo 取不到格号
+ *   会退化成 0（贴图集左上角那一格），矿车会披着草方块/石头的皮满地跑。 */
+registerTile('cart_metal', null);
+TILE_COLOR['cart_metal'] = [176, 180, 190];
 if (TILE_NAMES.length > ATLAS_COLS * ATLAS_COLS)
   throw new Error(`贴图格数不足：需要 ${TILE_NAMES.length}，贴图集只有 ${ATLAS_COLS * ATLAS_COLS}`);
 
@@ -629,6 +677,8 @@ export function itemTip(id) {
   if (id === I.ARROW) return '（弓的弹药）';
   if (d.summon) return `（右键召唤${MOB_TYPES[d.summon].name} · 会主动攻击敌对生物）`;
   if (d.spawn) return `（右键在准星处放出一只${MOB_TYPES[d.spawn].name} · 白天黑夜都能用）`;
+  if (id === I.MINECART) return '（对着铁轨右键放下矿车 · 再右键上车，空格下车）';
+  if (id === I.BLINK) return '（右键瞬移到准星落点 · 只传到站得住的地方）';
   return '';
 }
 

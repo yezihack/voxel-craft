@@ -29,6 +29,9 @@ export const ui = reactive({
   bagOpen: false,
   bagExpanded: false,          // 储物区展开全部 5 排
 
+  /* ---- 世界 ---- */
+  worldFlat: false,            // 世界类型：false = 经典起伏，true = 超平坦
+
   /* ---- 弹层 ---- */
   veilVisible: true,           // 开始 / 暂停遮罩
   veilHint: '点击后会锁定鼠标，按 <b>Esc</b> 可以随时退出',

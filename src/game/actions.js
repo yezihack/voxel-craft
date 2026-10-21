@@ -3,7 +3,8 @@
 import { toast } from './uiState.js'
 import { MODE, mode, running, setHandSwing } from './state.js'
 import { blip, noiseBurst } from './audio.js'
-import { BLOCKS, DIM_N, EGG_OF, H, I, ITEMS, PORTAL_BLOCK, REACH, SUMMON_OF } from './config.js'
+import { BLOCKS, DIM_N, EGG_OF, EYE, H, I, ITEMS, PORTAL_BLOCK, REACH, SUMMON_OF } from './config.js'
+import { carts, isRail, raycastCart, spawnCart, boardCart } from './carts.js'
 import { DIMS } from './dims.js'
 import { getEffective, isLiquid, isSolid, setBlock } from './generate.js'
 import { MOB_CAP, MOB_TYPES, mobs, spawnMob, summonGolem } from './mobs.js'
@@ -11,6 +12,7 @@ import { insideSelf, player, raycast } from './player.js'
 import { ignitePortal } from './portal.js'
 import { collectDrop, heldId, invCount, invTake, tryEat } from './survival.js'
 import { P } from './textures.js'
+import { axisFromYaw, clearBelt, clearPad, registerPad, setBeltDir, tryBlink } from './transport.js'
 
 /* ============================== 操作 ============================== */
 
@@ -22,6 +24,11 @@ export const isBedrock = (hit) => hit.id === I.OBSIDIAN && hit.y === 0;
 export function breakBlock(hit, withDrop) {
   const id = hit.id;
   const B = BLOCKS[id];
+  /* 带状态的方块：拆掉的同时把「方向 / 配对」记录一起抹了。
+   * 漏掉这句，玩家把传送带拆了再在原处放一块新的，旧的朝向会诡异地复活
+   * （新方块读到上一次存的方向），而且被拆掉的传送板会留下一条指向空气的链接。 */
+  if (id === I.BELT) clearBelt(hit.x, hit.y, hit.z);
+  if (id === I.PAD) clearPad(hit.x, hit.y, hit.z);
   setBlock(hit.x, hit.y, hit.z, 0);
   setHandSwing(1);
   noiseBurst(0.10, 0.09, id === I.SAND ? 2600 : id === I.GLASS ? 5200 : 1100);
@@ -59,9 +66,19 @@ export function doPlace() {
     if (SUMMON_OF[id]) { trySummon(id); return; }
     if (EGG_OF[id]) { trySpawnEgg(id); return; }                   // 刷怪蛋：放生物
     if (ITEMS[id].core !== undefined) { tryIgnite(id); return; }   // 维度核心：点门框
+    if (id === I.MINECART) { tryPlaceCart(); return; }             // 矿车：放到铁轨上
+    if (id === I.BLINK) {                                          // 传送珠：短距瞬移
+      if (mode === MODE.SURVIVAL && !invCount(id)) { toast('背包里没有传送珠'); return; }
+      if (tryBlink() && mode === MODE.SURVIVAL) invTake(id, 1);
+      return;
+    }
     if (tryEat(id)) { noiseBurst(0.09, 0.05, 700); blip(520, 0.10, 'sine', 0.05); }
     return;
   }
+
+  /* 右键一辆矿车 = 上车。必须**先于**放置判定：矿车不是方块，
+   * 不拦下来的话这次右键会变成「在车身上贴一块方块」，而玩家想的是上车。 */
+  if (tryBoardCart()) return;
 
   const hit = raycast(REACH);
   if (!hit) return;
@@ -73,8 +90,49 @@ export function doPlace() {
   if (isSolid(id) && insideSelf(x, y, z)) return;
   if (mode === MODE.SURVIVAL && !invTake(id, 1)) return;   // 生存模式：有货才放得下
   setBlock(x, y, z, id);
+  /* 带状态的方块：放置时顺手登记方向 / 配对 */
+  if (id === I.BELT) setBeltDir(x, y, z, axisFromYaw(player.yaw));
+  if (id === I.PAD) {
+    const r = registerPad(x, y, z);
+    toast(r === 'linked' ? '🔵 传送板已配对 · 踩上去传到对面'
+                         : '🔵 传送板已就位 · 再放一块与之配对');
+  }
   noiseBurst(0.06, 0.07, 900);
   blip(300 + id * 10, 0.05, 'sine', 0.04);
+}
+
+/* 右键一辆矿车 → 上车。没瞄到车就返回 false，交给后面的放置逻辑。 */
+export function tryBoardCart() {
+  if (carts.length === 0) return false;
+  const p = player;
+  const cp = Math.cos(p.pitch), sp = Math.sin(p.pitch);
+  const dir = [-Math.sin(p.yaw) * cp, sp, -Math.cos(p.yaw) * cp];
+  const hit = raycastCart(p.x, p.y + EYE, p.z, dir[0], dir[1], dir[2], REACH);
+  if (!hit) return false;
+  boardCart(hit.cart);
+  return true;
+}
+
+/* 手持矿车对着**铁轨**右键 → 在那条轨上生成一辆车。
+ * ⚠ 判定的是「准星命中的那一格是不是铁轨」，而不是「相邻空格能不能放东西」——
+ *   后者会把车放到铁轨旁边的空气里，车一生成就往下掉。
+ * 铁轨是薄板（非实心），射线照旧能命中它（raycast 只排除液体），所以直接判即可。 */
+export function tryPlaceCart() {
+  const hit = raycast(REACH);
+  if (!hit) { toast('准星对着一段铁轨再按右键'); return false; }
+  if (!isRail(hit.id)) { toast('矿车只能放在铁轨 / 充能铁轨上'); return false; }
+  for (const c of carts)
+    if (Math.floor(c.x) === hit.x && Math.floor(c.z) === hit.z && Math.floor(c.y - 0.05) === hit.y) {
+      toast('这一格已经有车了'); return false;
+    }
+  if (mode === MODE.SURVIVAL && !invCount(I.MINECART)) { toast('背包里没有矿车'); return false; }
+  const c = spawnCart(hit.x, hit.y, hit.z);
+  if (!c) { toast('场上的矿车太多了，先收走几辆'); return false; }
+  if (mode === MODE.SURVIVAL) invTake(I.MINECART, 1);
+  spawnParticles(hit.x + 0.5, hit.y + 0.4, hit.z + 0.5, [176, 180, 190]);
+  noiseBurst(0.14, 0.09, 850);
+  blip(240, 0.18, 'triangle', 0.06);
+  return true;
 }
 
 /* 右键「傀儡核心」→ 在准星指着的方块顶上召唤一只傀儡。

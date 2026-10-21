@@ -2,6 +2,7 @@
 import { engine, ui } from '../engine.js'
 import { MODES } from '../data/modes.js'
 import { VEIL_KEYS } from '../data/veilKeys.js'
+import { WORLDS } from '../data/worlds.js'
 
 /* 开始 / 暂停遮罩。同一个面板兼两职：
  *   · 首次进入 → 标题「方块世界」+ 模式选择 + 按键表 + 开始按钮
@@ -26,6 +27,13 @@ function tryStart() {
           v-for="m in MODES" :key="m.id" class="mode" :class="{ on: ui.mode === m.id }"
           :data-mode="m.id" @click="engine.pickMode(m.id)"
         >{{ m.label }}</button>
+      </div>
+      <div class="worlds">
+        <span class="wlabel">世界</span>
+        <button
+          v-for="w in WORLDS" :key="w.id" class="mode" :class="{ on: ui.worldFlat === w.flat }"
+          @click="engine.pickWorldType(w.flat)"
+        >{{ w.label }}</button>
       </div>
       <div class="keys">
         <div v-for="(k, i) in VEIL_KEYS" :key="i"><kbd>{{ k.key }}</kbd> {{ k.text }}</div>
@@ -104,6 +112,21 @@ function tryStart() {
 .mode[data-mode="1"].on {
   background: linear-gradient(135deg, #ffc061, #ff7a59);
   color: #240c02
+}
+
+/* ---------- 世界类型 ---------- */
+.worlds {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 18px;
+}
+
+.wlabel {
+  font-size: 11.5px;
+  letter-spacing: .6px;
+  color: var(--dim)
 }
 
 .mode[data-mode="2"].on {

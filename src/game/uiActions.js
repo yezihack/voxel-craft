@@ -3,6 +3,8 @@
  * 所有「用户点了界面上某个东西」要触发的逻辑都在这里导出，组件只管调用，
  * 不去碰引擎内部状态。原先散落在 onclick / addEventListener 里的代码全部收拢到此。 */
 import { audio, blip } from './audio.js'
+import { despawnAllBots } from './bots.js'
+import { despawnAllCarts } from './carts.js'
 import { defName, HOTBAR } from './config.js'
 import {
   craftAutoFill, craftClearAt, craftResult, craftSlots,
@@ -10,15 +12,17 @@ import {
 } from './crafting.js'
 import { input, keys } from './input.js'
 import { clamp } from './math.js'
-import { despawnAllMobs } from './mobs.js'
+import { chunks } from './mesher.js'
+import { despawnAllMobs, surfaceY } from './mobs.js'
 import { player } from './player.js'
 import { canvas } from './renderer.js'
 import { HOTBAR_N, activeSlots, cancelDig, respawn } from './survival.js'
 import {
-  MODE, bowCharge, breakHeld, lookVec, mode, paused, placeHeld, placeRepeat,
-  running, selected, setBowCharge, setBreakHeld, setModeState, setPaused,
-  setPlaceHeld, setPlaceRepeat, setRunning, setSelected, setSpectate, spectate,
-  stickVec,
+  MODE, SEED, bowCharge, breakHeld, flatWorld, lookVec, mode, paused, placeHeld,
+  placeRepeat, running, selected, setBowCharge, setBreakHeld, setColCache,
+  setColCacheSeed, setFlatWorld, setModeState, setPaused, setPlaceHeld,
+  setPlaceRepeat, setRunning, setSelected, setSpectate, setStructShapeCache,
+  spectate, stickVec,
 } from './state.js'
 import { toast, ui } from './uiState.js'
 
@@ -136,6 +140,41 @@ export function setMode(m, announce = true) {
 export function pickMode(m) {
   ui.mode = m
   setMode(m, false)
+}
+
+/* ---------------- 世界类型 ---------------- */
+
+/* 开始面板上选「经典 / 超平坦」。
+ * 换世界类型 = 换地形生成器的参数，但**不换种子**：同一个种子在两种地形下
+ * 是两张完全不同的图，这正是玩家想看到的（不是「重新掷骰子」）。
+ *
+ * ⚠ 三张缓存必须一起清：
+ *   · colCache（列高度 / 群系）—— 键里只有坐标和维度，**没有**世界类型，
+ *     不清的话平坦世界里会读出经典地形算出来的高度，地表一半平一半起伏；
+ *   · structShapeCache（结构形状）—— 村庄是按旧地形高度摆的，留着会悬空；
+ *   · 区块几何 —— 全部标脏，下一帧开始重建。
+ * 场上的人/怪/车也一并清掉：它们的坐标属于上一张地形，
+ * 在平坦世界里可能整个埋在地下（经典地形的山谷在新图里是实心的）。 */
+export function pickWorldType(flat) {
+  const v = !!flat
+  if (v === flatWorld) return
+  ui.worldFlat = v
+  setFlatWorld(v)
+  setColCache(new Map()); setColCacheSeed(SEED)
+  setStructShapeCache(new Map())
+  for (const c of chunks) c.dirty = true
+  despawnAllMobs()
+  despawnAllBots()
+  despawnAllCarts()
+  const gy = surfaceY(Math.floor(player.x), Math.floor(player.z))
+  if (gy > 1) {
+    player.y = gy + 1.2
+    player.vy = 0
+    player.spawn = [player.x, player.y, player.z]
+  }
+  toast(v ? '▬ 超平坦世界：地表恒高，无村庄无树林，适合搭轨道与装置'
+          : '⛰️ 经典世界：起伏地形 + 村庄 / 遗迹 / 矿井')
+  blip(v ? 620 : 420, 0.10, 'sine', 0.05)
 }
 
 /* ---------------- 开始 / 暂停 / 背包面板 ---------------- */

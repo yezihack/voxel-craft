@@ -11,7 +11,7 @@ import { buildChunk, chunks, initChunks } from './mesher.js'
 import { PASSIVE_TYPES, spawnMob, surfaceY } from './mobs.js'
 import { player } from './player.js'
 import { dimSpawn } from './portal.js'
-import { updateSkyColor, uploadAtlas, uploadBotMesh, uploadChunk, uploadDropMesh, uploadMobMeshes } from './post.js'
+import { updateSkyColor, uploadAtlas, uploadBotMesh, uploadCartMesh, uploadChunk, uploadDropMesh, uploadMobMeshes } from './post.js'
 import { canvas } from './renderer.js'
 import { buildCloudTexture } from './sky.js'
 import { breakHeld, running, setBowCharge, setBreakHeld, setOnDeath, setOnHurt, setPaused, setPlaceHeld, setPlaceRepeat, setRunning } from './state.js'
@@ -77,6 +77,7 @@ export function boot() {
   uploadMobMeshes()
   uploadBotMesh()          // AI 玩家：全场共用一份网格
   uploadDropMesh()         // 掉落物小方块（也要一份网格 + uTint 染色）
+  uploadCartMesh()         // 矿车：车斗 + 四个轮子，一次上传全场共用
   updateSkyColor()      // 先按当前时间把天空/太阳/环境光算一遍，
                         // 免得第一帧拿到全 1 的默认值（会闪一下正午）
   resize()

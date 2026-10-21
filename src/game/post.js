@@ -2,6 +2,7 @@
 
 import { MODE, dim, handSwing, mode, swingT } from './state.js'
 import { BOT_PARTS, botDrops, bots } from './bots.js'
+import { cartYaw, carts } from './carts.js'
 import { ATLAS_PX, D, EYE, MAT_PLAIN, OFF_ALPHA, OFF_FLAG, OFF_LIT, OFF_POS, OFF_UV, QUAD_POS, SEA, STRIDE, UV_QUAD, defColor, isBlockId, tileOfId, tileUV } from './config.js'
 import { DIMS } from './dims.js'
 import { M4, clamp } from './math.js'
@@ -698,6 +699,38 @@ export function drawBotDrops() {
     gl.drawElements(gl.TRIANGLES, dropGpu.count, isGL2 ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
   }
   gl.uniform3f(uT, 1, 1, 1);
+  gl.uniformMatrix4fv(locMain.uModel, false, M4.ident());
+}
+
+/* ---------------- 矿车（一辆 = 一个斗 + 四个轮子）----------------
+ * 和生物同构：一次上传、靠 uModel 摆位置。整辆车是**一个网格一次 draw**，
+ * 不按部件分（它没有需要独立摆动的零件，逐部件 setTint 纯属浪费）。
+ * 尺寸刻意压矮（总高约 0.55）：矿车要能从一格高的洞里穿过去，
+ * 做成 1 格高的话它会在第一处矮洞前卡住，看着像坏了。 */
+export let cartGpu = null;
+export function uploadCartMesh() {
+  const pos = [], uv = [], lit = [], alp = [], flag = [], idx = [];
+  const box = (b, at) => {
+    const base = pos.length / 3;
+    boxGeo(pos, uv, lit, alp, flag, b, at, 'cart_metal');
+    for (let f = 0; f < 6; f++) { const k = base + f * 4; idx.push(k, k + 1, k + 2, k, k + 2, k + 3); }
+  };
+  box([0.88, 0.30, 0.88], [0, 0.26, 0]);                                  // 车斗
+  for (const wx of [-0.33, 0.33]) for (const wz of [-0.33, 0.33])         // 四个轮子
+    box([0.16, 0.16, 0.16], [wx, 0.08, wz]);
+  cartGpu = gpuFromArrays(pos, uv, lit, alp, flag, idx);
+}
+export function drawCarts() {
+  if (!cartGpu || !carts.length) return;
+  bindLayout(cartGpu.vbo, cartGpu.ibo);
+  gl.uniform3f(locMain.uTint, 1, 1, 1);
+  for (const c of carts) {
+    const dx = c.x - player.x, dz = c.z - player.z;
+    if (dx * dx + dz * dz > 52 * 52) continue;
+    const m = M4.mul(M4.trans(c.x, c.y, c.z), M4.rotY(cartYaw(c)));
+    gl.uniformMatrix4fv(locMain.uModel, false, m);
+    gl.drawElements(gl.TRIANGLES, cartGpu.count, isGL2 ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
+  }
   gl.uniformMatrix4fv(locMain.uModel, false, M4.ident());
 }
 

@@ -112,6 +112,31 @@ export function vertexAO(side1, side2, corner) {
   return 1 - (side1 + side2 + corner) * 0.16;
 }
 
+/* ---------------- 非立方方块：十字薄片 / 贴地薄板 ----------------
+ * 火把、铁轨、传送板不是整立方，整立方那 6 面画法会把它们渲染成一块实心方板。
+ * 所以给这两类形状各写一份「格内四边形」，直接跳过下面的立方分支。
+ *
+ * ⚠ 一律**正反各画一遍**（索引顺序反过来）。主循环里 CULL_FACE 是开着的，
+ *   薄片从背面看就整个消失 —— 铁轨走到下面看不见、火把转个身就没了。
+ * ⚠ 顶点顺序要和 UV_QUAD 对齐（角 0 在贴图底边），否则贴图会上下颠倒。
+ * ⚠ alpha 恒为 1：这些方块走**不透明趟 + uCutout**，让 shader 的 discard
+ *   按纹素 alpha 裁掉透明部分；走透明趟的话它们会被排序问题搅成一团。 */
+export const SHEET_CROSS = { inset: 0.20, top: 0.86 };
+export const SHEET_PLATE = { inset: 0.04, y: 0.12 };
+
+/* 某一形状在**一个格内**的四边形列表（每个是 4 个 [x,y,z] 角） */
+export function sheetCorners(shape) {
+  if (shape === 'cross') {
+    const i = SHEET_CROSS.inset, h = SHEET_CROSS.top;
+    return [
+      [[i, 0, i], [1 - i, 0, 1 - i], [1 - i, h, 1 - i], [i, h, i]],         // 对角面 A
+      [[1 - i, 0, i], [i, 0, 1 - i], [i, h, 1 - i], [1 - i, h, i]],         // 对角面 B
+    ];
+  }
+  const i = SHEET_PLATE.inset, y = SHEET_PLATE.y;
+  return [[[i, y, 1 - i], [1 - i, y, 1 - i], [1 - i, y, i], [i, y, i]]];     // 贴地薄板
+}
+
 /* 构建一个区块的几何：面剔除 + AO 烘焙 + 贴图 UV，一次性写入 VBO */
 export function buildChunk(c) {
   const pos = [], uv = [], lit = [], alp = [], flag = [];
@@ -128,6 +153,27 @@ export function buildChunk(c) {
         // 又不像逐顶点抖动那样在面上拉出渐变（贴图会把渐变照得很假）
         const bj = (hash2(x * 3 + 7, z * 3 + 11, y * 5 + 3) - 0.5) * 0.10;
         const matFlag = matFlagOf(B);         // 整块一个材质标志，同一方块 24 个顶点都一样
+
+        /* 非立方（火把 / 铁轨 / 传送板）：画格内薄片，不走下面那 6 面分支 */
+        if (B.shape) {
+          const tile = tileIndexOf(id, 'side');
+          /* 薄片不吃面朝向明暗（它没有「朝哪」这回事），也没有邻面可遮 ——
+           * AO 恒为 1，只留整块那一点抖动。自发光方块（火把 / 传送板）抬下限。 */
+          let lv = clamp(1 + bj * 0.5, 0.62, 1.15);
+          if (B.light) lv = Math.max(lv, 0.92);
+          for (const corners of sheetCorners(B.shape)) {
+            const base = pos.length / 3;
+            for (let k = 0; k < 4; k++) {
+              const v = corners[k], q = UV_QUAD[k], t = tileUV(tile, q[0], q[1]);
+              pos.push(x + v[0], y + v[1], z + v[2]);
+              uv.push(t[0], t[1]);
+              lit.push(lv); alp.push(1); flag.push(matFlag);
+            }
+            idxOpa.push(base, base + 1, base + 2, base, base + 2, base + 3);   // 正面
+            idxOpa.push(base, base + 2, base + 1, base, base + 3, base + 2);   // 背面
+          }
+          continue;
+        }
         /* 水面高度按水位下沉：满水 1.0，最薄的 7 级约 0.26。
          * 非水方块恒为 1，下面那句 `v[1] * hTop` 就退化成 `v[1]`，老几何一字不变。 */
         const hTop = fluidHeightAt(x, y, z, id);
