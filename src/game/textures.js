@@ -613,6 +613,47 @@ export const TILE_GEN = {
     for (let y = 16; y <= 20; y++) for (let x = 13; x <= 18; x++) P(x, y, ink);
   },
 
+  /* ---------------- Boss 贴图 ----------------
+   * 三种各两格：身体 + 眼/脸。和普通 mob 同构，buildMobMesh 不需要改。
+   * 末影龙 = 深紫黑鳞片 + 紫色发光眼；
+   * 凋灵   = 深灰石体 + 三头黑脸；
+   * 远古守卫 = 青蓝石甲 + 金色发光眼。 */
+  mob_dragon: (s, c) => {
+    noiseTile(s, c, 6, 0.04);
+    for (let i = 0; i < 14; i++) {
+      const x = Math.floor(hash2(i, 3, s) * TP), y = Math.floor(hash2(i, 7, s) * TP);
+      P(x, y, shade(c, -40));
+    }
+  },
+  mob_dragon_eye: (s, c) => {
+    for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++) P(x, y, shade(c, -20));
+    for (let y = 10; y <= 21; y++) for (let x = 10; x <= 21; x++) P(x, y, c);
+    for (let y = 14; y <= 17; y++) for (let x = 14; x <= 17; x++) P(x, y, shade(c, 60));
+  },
+  mob_wither: (s, c) => {
+    noiseTile(s, c, 5, 0.03);
+    for (let y = 0; y < TP; y++)
+      if (hash2(y, 11, s) > 0.5)
+        for (let x = 0; x < TP; x++) P(x, y, shade(c, -22));
+  },
+  mob_wither_face: (s, c) => {
+    for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++) P(x, y, shade(c, -50));
+    const ink = [12, 8, 12];
+    for (let y = 12; y <= 15; y++) for (let x = 8; x <= 13; x++) P(x, y, ink);
+    for (let y = 12; y <= 15; y++) for (let x = 18; x <= 23; x++) P(x, y, ink);
+    for (let y = 18; y <= 22; y++) for (let x = 13; x <= 18; x++) P(x, y, ink);
+  },
+  mob_guardian: (s, c) => {
+    noiseTile(s, c, 5, 0.03);
+    for (let y = 0; y < TP; y += 4)
+      for (let x = 0; x < TP; x++) P(x, y, shade(c, -18));
+  },
+  mob_guardian_face: (s, c) => {
+    for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++) P(x, y, c);
+    for (let y = 10; y <= 21; y++) for (let x = 10; x <= 21; x++) P(x, y, shade(c, 80));
+    for (let y = 14; y <= 17; y++) for (let x = 14; x <= 17; x++) P(x, y, shade(c, -40));
+  },
+
   /* ---------------- 异界地形方块 ----------------
    * 每种都要求和主世界的同类方块**一眼分得开**：石头是乱裂纹、玄武岩是竖节理、
    * 末地石是密集细孔、晶簇岩是菱形晶面。 */

@@ -217,6 +217,64 @@ export const MOB_TYPES = {
       { box: [0.30, 0.18, 0.06], at: [0, 0.34, 0.28], tex: 'mob_slime_face' },
     ],
   },
+
+  /* ---------------- Boss（玩家可召唤） ----------------
+   * boss:true 让 mobAI 走专属分支（见下），不进 hostile 的追人/打人逻辑。
+   * 三种各一种「打法」，而不是同一种换皮：
+   *   末影龙   空中盘旋 + 俯冲喷弹（ranged），hp 200，掉 3 钻石
+   *   凋灵     三头远程齐射 + 周期爆破方块（witherBomb），hp 160，掉 2 黑曜石
+   *   远古守卫 肉盾近战 + 周期召唤小史莱姆（summonAdds），hp 240，掉 4 金
+   *
+   * boss 不参与距离回收（见 updateMobs 末尾的 guard 判定旁），
+   * 也不进昼夜刷新池（NIGHT_POOL 不含它们）。
+   * 只能由玩家用 boss 蛋主动召唤（见 trySpawnEgg）。 */
+  dragon: {
+    name: '末影龙', hp: 200, speed: 4.0, w: 1.40, h: 2.20, boss: true,
+    fly: { height: 6, amp: 2.0, freq: 1.2 },          // 盘旋飞行参数
+    ranged: { min: 5, max: 20, cd: 1.6, speed: 18, dmg: 5 },  // 喷弹
+    sight: 30, drop: I.DIAMOND, dropN: 3,
+    parts: [
+      { box: [0.60, 0.50, 2.20], at: [0, 1.10, 0], tex: 'mob_dragon' },       // 长身
+      { box: [0.50, 0.44, 0.50], at: [0, 1.30, 1.35], tex: 'mob_dragon' },    // 头
+      { box: [0.30, 0.20, 0.10], at: [0, 1.42, 1.62], tex: 'mob_dragon_eye' }, // 眼区
+      { box: [0.80, 0.16, 0.80], at: [-1.10, 1.00, -0.40], tex: 'mob_dragon', arm: 1 }, // 左翼
+      { box: [0.80, 0.16, 0.80], at: [ 1.10, 1.00, -0.40], tex: 'mob_dragon', arm: 2 }, // 右翼
+      { box: [0.22, 0.44, 0.22], at: [-0.20, 0.55, -0.80], tex: 'mob_dragon', leg: 1 },
+      { box: [0.22, 0.44, 0.22], at: [ 0.20, 0.55, -0.80], tex: 'mob_dragon', leg: 2 },
+    ],
+  },
+  wither: {
+    name: '凋灵', hp: 160, speed: 2.8, w: 1.20, h: 2.60, boss: true,
+    fly: { height: 5, amp: 1.5, freq: 0.9 },
+    ranged: { min: 4, max: 18, cd: 1.2, speed: 16, dmg: 4 },
+    witherBomb: { radius: 2.5, dmg: 6, cd: 4.5 },     // 周期爆破方块
+    sight: 28, drop: I.OBSIDIAN, dropN: 2,
+    parts: [
+      { box: [0.70, 1.20, 0.50], at: [0, 1.30, 0], tex: 'mob_wither' },       // 主体
+      { box: [0.44, 0.44, 0.44], at: [-0.66, 1.90, 0], tex: 'mob_wither_face' }, // 左头
+      { box: [0.44, 0.44, 0.44], at: [ 0.00, 2.20, 0], tex: 'mob_wither_face' }, // 中头
+      { box: [0.44, 0.44, 0.44], at: [ 0.66, 1.90, 0], tex: 'mob_wither_face' }, // 右头
+      { box: [0.26, 1.00, 0.26], at: [-0.60, 1.00, 0], tex: 'mob_wither', arm: 1 },
+      { box: [0.26, 1.00, 0.26], at: [ 0.60, 1.00, 0], tex: 'mob_wither', arm: 2 },
+      { box: [0.30, 0.80, 0.30], at: [-0.20, 0.40, 0], tex: 'mob_wither', leg: 1 },
+      { box: [0.30, 0.80, 0.30], at: [ 0.20, 0.40, 0], tex: 'mob_wither', leg: 2 },
+    ],
+  },
+  guardian: {
+    name: '远古守卫', hp: 240, speed: 2.0, w: 1.30, h: 2.80, boss: true,
+    dmg: 8, atkRange: 2.0, sight: 24,
+    summonAdds: { type: 'slime_small', n: 2, cd: 6.0, cap: 4 }, // 周期召唤小史莱姆
+    drop: I.GOLD, dropN: 4,
+    parts: [
+      { box: [0.90, 1.00, 0.60], at: [0, 1.50, 0], tex: 'mob_guardian' },       // 躯干
+      { box: [0.60, 0.56, 0.56], at: [0, 2.30, 0], tex: 'mob_guardian' },      // 头
+      { box: [0.30, 0.20, 0.12], at: [0, 2.42, 0.32], tex: 'mob_guardian_face' }, // 金眼
+      { box: [0.30, 1.10, 0.30], at: [-0.70, 1.55, 0], tex: 'mob_guardian', arm: 1 },
+      { box: [0.30, 1.10, 0.30], at: [ 0.70, 1.55, 0], tex: 'mob_guardian', arm: 2 },
+      { box: [0.40, 1.00, 0.40], at: [-0.30, 0.50, 0], tex: 'mob_guardian', leg: 1 },
+      { box: [0.40, 1.00, 0.40], at: [ 0.30, 0.50, 0], tex: 'mob_guardian', leg: 2 },
+    ],
+  },
 };
 
 /* 把生物表交回 config.js（itemTip 要拿它拼「右键召唤XXX」的提示）。
@@ -367,6 +425,18 @@ export function mobPhysics(m, dt) {
   if (hot) {                                   // 岩浆里会烧死
     m.hp -= 9 * dt; m.hurtFlash = Math.max(m.hurtFlash, 0.2);
     if (m.hp <= 0) { m.dead = true; return; }
+  }
+
+  /* 飞行 boss（末影龙 / 凋灵）：跳过重力与贴地探测。
+   * mobAI 会直接设 m.vy（盘旋呼吸），这里只做水平 AABB 扫掠防穿墙。
+   * 不做这条短路的话，飞行 boss 会像普通生物一样经历自由落体 → 贴地 → 再落体，
+   * 视觉上就是「龙在地上蹦」，fly 参数形同虚设。 */
+  if (D.fly) {
+    moveBodyAxis(m, hw, D.h, 'x', m.vx * dt);
+    moveBodyAxis(m, hw, D.h, 'z', m.vz * dt);
+    moveBodyAxis(m, hw, D.h, 'y', m.vy * dt);
+    m.onGround = false;
+    return;
   }
 
   const wasGround = !!m.onGround;
@@ -572,6 +642,103 @@ export function mobAI(m, dt) {
     }
   }
 
+  /* ---------------- Boss AI ----------------
+   * boss 不走 hostile / guard / passive 任何一条既有路径，单独一支。
+   * 三种 boss 共享「锁定玩家 + 保持中距」的底盘，差异在攻击方式：
+   *   末影龙 / 凋灵 → 飞行 + 远程喷弹（ranged），凋灵额外周期爆破方块
+   *   远古守卫   → 地面近战 + 周期召唤小史莱姆当援军
+   *
+   * ⚠ boss 的 fly 参数在这里生效：物理段 mobPhysics 会跳过重力（见那里），
+   *   这里只管水平速度与高度维持 —— 飞行 boss 不该靠 mobAI 落地。
+   * 字段一律 `|| 0` 兜底：无头测试可能拿裸对象调 mobAI。 */
+  if (D.boss) {
+    const sight = D.sight || 24;
+    const T = hostileTarget(m, sight);        // 复用：boss 也以玩家为目标
+    m.atkT = (m.atkT || 0) - dt;
+    m.bombT = (m.bombT || 0) - dt;
+    m.summonT = (m.summonT || 0) - dt;
+
+    if (T) {
+      const tx = T.obj.x - m.x, tz = T.obj.z - m.z;
+      const td = T.dist || 1;
+      m.yaw = Math.atan2(tx, tz);
+
+      if (D.fly) {
+        /* 飞行 boss：盘旋在目标上空。水平保持中距，高度用正弦呼吸。 */
+        const F = D.fly;
+        m.vy = Math.sin(m.animT * F.freq) * F.amp;
+        const want = td < (D.ranged ? D.ranged.min : 4) ? -1 : td > (D.ranged ? D.ranged.max : 15) ? 1 : 0.3;
+        const sp = D.speed * want;
+        m.vx += (tx / td * sp - m.vx) * Math.min(1, 5 * dt);
+        m.vz += (tz / td * sp - m.vz) * Math.min(1, 5 * dt);
+      } else {
+        /* 地面 boss：直接追玩家，近战。 */
+        const sp = D.speed;
+        m.vx += (tx / td * sp - m.vx) * Math.min(1, 8 * dt);
+        m.vz += (tz / td * sp - m.vz) * Math.min(1, 8 * dt);
+        if (m.atkT <= 0 && td < D.atkRange && Math.abs(T.dy) < 3) {
+          m.atkT = 1.4;
+          if (T.kind === 'guard') {
+            damageMob(T.obj, D.dmg, tx / td, tz / td);
+          } else {
+            hurt(D.dmg, '你被' + D.name + '击中了');
+            player.vx += tx / td * 6.0; player.vz += tz / td * 6.0;
+            player.vy = Math.max(player.vy, 3.6);
+          }
+        }
+      }
+
+      /* 远程攻击：末影龙 / 凋灵。复用 shootArrowAt（ foe:true 只认玩家）。 */
+      if (D.ranged && m.atkT <= 0 && td >= D.ranged.min && td <= D.ranged.max) {
+        m.atkT = D.ranged.cd;
+        shootArrowAt(m, D.ranged, T.obj);
+      }
+
+      /* 凋灵周期爆破：在目标脚下炸一个球，破坏方块 + 伤人。
+       * 复用 explodeMob 的「球形破坏 + 衰减伤害」逻辑，只是中心换到玩家位置。
+       * 不能直接调 explodeMob(m) —— 那会让 m.dead = true，凋灵一炸就自杀了。
+       * 这里只借它的方块破坏部分，伤害单独算。 */
+      if (D.witherBomb && m.bombT <= 0) {
+        m.bombT = D.witherBomb.cd;
+        const R = D.witherBomb.radius;
+        const cx = player.x, cy = player.y + 0.6, cz = player.z;
+        const r2 = R * R;
+        for (let y = Math.max(1, Math.floor(cy - R)); y <= Math.ceil(cy + R); y++)
+          for (let z = Math.floor(cz - R); z <= Math.ceil(cz + R); z++)
+            for (let x = Math.floor(cx - R); x <= Math.ceil(cx + R); x++) {
+              const d2 = (x + 0.5 - cx) * (x + 0.5 - cx) + (y + 0.5 - cy) * (y + 0.5 - cy) + (z + 0.5 - cz) * (z + 0.5 - cz);
+              if (d2 > r2) continue;
+              const id = getEffective(x, y, z);
+              if (!id || isLiquid(id)) continue;
+              const B = BLOCKS[id];
+              if (B && B.hard >= 6) continue;
+              if (typeof setBlock === 'function') setBlock(x, y, z, 0);
+            }
+        const pd = Math.hypot(player.x - cx, player.y - cy, player.z - cz);
+        if (pd < R) hurt(D.witherBomb.dmg * (1 - pd / R), '你被凋灵的爆破击中了');
+        if (typeof noiseBurst === 'function') noiseBurst(0.6, 0.20, 160);
+      }
+
+      /* 远古守卫周期召唤援军：场上小史莱姆不超过 cap 就再召 n 只。 */
+      if (D.summonAdds && m.summonT <= 0) {
+        let count = 0;
+        for (const o of mobs) if (o.type === D.summonAdds.type) count++;
+        if (count < D.summonAdds.cap && mobs.length < MOB_CAP) {
+          m.summonT = D.summonAdds.cd;
+          for (let i = 0; i < D.summonAdds.n; i++) {
+            const a = mobRng() * Math.PI * 2, r = 3 + mobRng() * 2;
+            spawnMob(D.summonAdds.type, m.x + Math.cos(a) * r, m.y, m.z + Math.sin(a) * r, mobRng() * Math.PI * 2);
+          }
+          if (typeof spawnParticles === 'function')
+            spawnParticles(m.x, m.y + 1, m.z, [108, 188, 114]);
+        }
+      }
+      return;
+    }
+    /* 没目标时：飞行 boss 悬停，地面 boss 闲逛（走下面默认分支） */
+    if (D.fly) { m.vx *= 0.92; m.vz *= 0.92; m.vy = Math.sin(m.animT * D.fly.freq) * D.fly.amp * 0.5; return; }
+  }
+
   if (D.hostile) {
     // 看得见玩家 / 傀儡就追，贴脸就打。夜里视野更远
     const sight = D.sight * (isNight() ? 1.25 : 0.85);
@@ -714,9 +881,11 @@ export function updateMobs(dt, doSpawn = true) {
     mobAI(m, dt);
     /* 走远了就回收。傀儡除外 —— 它们认家（m.home），玩家回基地时得还在；
      * 数量由 GUARD_CAP 卡着，不会因此越攒越多。
+     * boss 同理除外 —— 它是玩家主动召唤的挑战，不该因为玩家走远就消失
+     * （否则打一半跑开两步 boss 就没了，毫无紧张感）。
      * 「正在被附身观看」的那只也除外：旁观者的相机骑在它身上，
      * 它一被回收，视角就会「啪」地弹回自由模式。 */
-    if (!MOB_TYPES[m.type].guard && m !== spectate && Math.hypot(m.x - player.x, m.z - player.z) > 48) mobs.splice(i, 1);
+    if (!MOB_TYPES[m.type].guard && !MOB_TYPES[m.type].boss && m !== spectate && Math.hypot(m.x - player.x, m.z - player.z) > 48) mobs.splice(i, 1);
   }
 }
 export function mobDeathDrop(m) {

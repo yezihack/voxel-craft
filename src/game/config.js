@@ -452,6 +452,10 @@ Object.assign(I, {
   EGG_SLIME_SMALL: 256,
   /* 运输物品：257 矿车（右键放在铁轨上）、258 传送珠（右键短距瞬移） */
   MINECART: 257, BLINK: 258,
+  /* Boss 刷怪蛋（右键放出一只 boss，见 EGG_OF / trySpawnEgg）。
+   * boss 不进昼夜刷新池、不参与距离回收 —— 只能由玩家主动召唤。
+   * 战利品掉落稀有材料（钻石 / 金 / 黑曜石），让打 boss 有收益。 */
+  EGG_DRAGON: 259, EGG_WITHER: 260, EGG_GUARDIAN: 261,
 });
 
 /* 物品表（非方块）：食物等，右键使用。
@@ -547,6 +551,14 @@ export const ITEMS = {
   255: { name:'史莱姆刷怪蛋', n:'蛋', color:[108,188,114], spawn:'slime_large', tex:'egg_slime_large' },
   256: { name:'小史莱姆刷怪蛋', n:'蛋', color:[138,208,144], spawn:'slime_small', tex:'egg_slime_small' },
 
+  /* ---------------- Boss 刷怪蛋 ----------------
+   * 三种 boss 各一枚蛋，颜色取其标志色。和普通蛋一样不受昼夜限制 ——
+   * boss 是玩家主动选择挑战的，不该被刷新总闸拦住。
+   * spawn 指向 MOB_TYPES 的键，载入期校验会兜底（和普通蛋同一套机制）。 */
+  259: { name:'末影龙刷怪蛋', n:'龙', color:[ 24, 18, 32], spawn:'dragon',   tex:'egg_dragon' },
+  260: { name:'凋灵刷怪蛋',   n:'凋', color:[ 40, 36, 40], spawn:'wither',   tex:'egg_wither' },
+  261: { name:'远古守卫蛋',   n:'卫', color:[ 72,132,156], spawn:'guardian', tex:'egg_guardian' },
+
   /* ---------------- 运输 ----------------
    * 矿车：右键点在**铁轨**上生成一辆（不是放到相邻格），走的是 tryPlaceCart。
    * 传送珠：右键瞬移到准星落点（站得住才传），走的是 tryBlink。
@@ -604,6 +616,12 @@ export const MOB_TILE_COLORS = {
   mob_creeper: [ 92, 168, 92], mob_creeper_face: [100, 176, 100],
   mob_skeleton: [212, 208, 196], mob_skeleton_face: [204, 200, 188],
   mob_slime: [108, 188, 114], mob_slime_face: [118, 198, 124],
+  /* Boss：三种各两格（身体 + 脸/眼），和普通 mob 同构，buildMobMesh 不需要改。
+   * 末影龙 = 黑紫长身 + 紫眼；凋灵 = 深灰石体 + 三头黑脸；
+   * 远古守卫 = 青蓝石甲 + 金眼。 */
+  mob_dragon: [ 36, 28, 50], mob_dragon_eye: [168, 96, 236],
+  mob_wither: [ 48, 44, 48], mob_wither_face: [ 28, 24, 28],
+  mob_guardian: [ 72,132,156], mob_guardian_face: [236,206, 92],
   /* AI 玩家：肤色 / 上衣 / 裤子 / 头发各一张中性贴图，靠 uTint 逐实例染色，
    * 所以纹理本身只画「明暗结构」，色相一律交给 tint —— 8~10 个 AI 玩家共用
    * 这一套网格，靠 tint 组合出各自的样子（换色不重建 GPU 缓冲）。 */

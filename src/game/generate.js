@@ -100,11 +100,16 @@ export function getEffective(x, y, z) {
 }
 export const isSolid = (id) => id > 0 && SOLID[id] === true;
 /* 不透明 = 实体且不带半透明标记（玻璃/冰/水/岩浆都会让邻面保留，
- * 否则会从外面看到「贴在玻璃背面的石头」这种穿帮） */
+ * 否则会从外面看到「贴在玻璃背面的石头」这种穿帮）。
+ *
+ * 带 shape 的方块（火把 / 铁轨 / 传送板）一律不算不透明：它们是格内薄片，
+ * 只占一格里的薄层，不该遮挡任何邻面。否则会把相邻实心方块朝向它那一面
+ * 当成「被挡住」而面剔除 —— 薄片背后没有几何遮挡，于是玩家透过火把就能
+ * 看到那块被剔掉面的方块内部，即「火把透视」穿帮。 */
 export const isOpaque = (id) => {
   if (!(id > 0)) return false;
   const B = BLOCKS[id];
-  return !!B && !B.alpha && !B.liquid;
+  return !!B && !B.alpha && !B.liquid && !B.shape;
 };
 /* 同类半透明方块之间不画内部面（两块并排的玻璃只留外壳） */
 export const isClearLike = (id) => { const B = BLOCKS[id]; return !!B && (!!B.alpha || !!B.liquid); };
