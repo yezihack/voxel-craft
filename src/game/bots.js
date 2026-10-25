@@ -5,6 +5,7 @@ import { spawnParticles } from './actions.js'
 import { blip } from './audio.js'
 import { BLOCKS, D, EYE, G, H, I, REACH, attackDamage, breakTime, dropCountOf, dropOf, isBlockId } from './config.js'
 import { getEffective, isLiquid, isSolid, setBlock } from './generate.js'
+import { RECIPES, recipeMatrix } from './crafting.js'
 import { keys } from './input.js'
 import { MOB_TYPES, damageMob, isNight, mobs, rayBox, raycastMob } from './mobs.js'
 import { moveBodyAxis, player } from './player.js'
@@ -34,6 +35,8 @@ export const BOT_KEEP = 68;                   // 走远到这个距离就回收�
                                        //   名字标签在 48 格外已经糊成一团了）
 export const BOT_SPAWN_MIN = 26, BOT_SPAWN_MAX = 54;   // 别在眼皮底下凭空冒出来
 export const BOT_H = 1.8, BOT_W = 0.6;        // 碰撞箱：和玩家几乎一样（PW=0.30）
+export const BOT_BAG_CAP = 40;                // 背包「种类」上限（数量不限）。放宽到 40，
+                                       //   让它们能同时带着木板/石头/工具/火把，掉落更丰富
 
 /* 名字池：中文网名 + 英文 ID 混排，比「玩家1/玩家2」有生气得多。
  * 刻意不带真实人名/谐音梗 —— 随机撞上现实里某个人的 ID 不太厚道。 */
@@ -129,9 +132,9 @@ export function spawnBot(x, y, z, name) {
     },
     /* 背包：id → 数量。采集会往里塞，建造从里面拿，死亡全掉出来。 */
     bag: new Map(),
-    bagCap: 24,                // 背包上限（格），满了就不再采集
+    bagCap: BOT_BAG_CAP,       // 背包「种类」上限，满了就不再采集新种类
     home: [x, y, z],            // 认家：白天出去干活，天黑往家走
-    state: 'idle',              // idle / gather / build / fight / flee / home
+    state: 'idle',              // idle / gather / build / craft / fight / flee / home
     stateT: 0,
     think: 0,                   // 决策节流：不是每帧都重新想
     goal: null,                 // { x, y, z } 当前目标点
@@ -140,6 +143,11 @@ export function spawnBot(x, y, z, name) {
     digId: 0,                   // 正在挖的那个方块 id（中途被换掉要作废）
     atkT: 0,                    // 挥击冷却
     swingT: 0,                  // 手臂动画（渲染用）
+    /* 建房蓝图：一次规划、分多次执行（建材不够就先去采集，回来接着盖）。 */
+    buildPlan: null,            // 待建格子的有序列表（按 y 升序）
+    buildIdx: 0,                // 当前盖到第几个
+    buildOrigin: null,          // [ox, oy, oz] 地基角
+    buildCd: 0,                 // 两座房子之间的冷却（秒），避免它们把世界盖满
     /* ⚠ 起跳冷却：台阶跳跃**必须**有它。没有它会自锁成「每帧垂直起跳」——
      * 撞墙时水平速度被moveBodyAxis 归零，下一帧 botWalkTo 又填满再撞一次，
      * 于是「撞→跳→悬空→还判定要跳」无限循环，人钉在台阶前上下颠（每秒 74 次）。 */
@@ -192,9 +200,16 @@ export function killBot(b) {
   if (!b.silent) {
     const loot = new Map(b.bag);
     if (loot.size === 0) {
-      // 空手被打死的也给点东西，不然玩家会觉得「白打了一架」
-      loot.set(I.COBBLE, 2 + Math.floor(botRng() * 4));
+      // 空手被打死的也给点「像样」的东西，不然玩家会觉得「白打了一架」
+      loot.set(I.PLANK, 3 + Math.floor(botRng() * 4));            // 木板 3~6
+      if (botRng() < 0.4) loot.set(I.TORCH, 4 + Math.floor(botRng() * 5)); // 偶尔附赠火把
     }
+    // 击杀奖励：让「打一架」更有收益——包里没有武器就 35% 送一把木剑
+    let hasWeapon = false;
+    for (const [id] of loot)
+      if (id === I.SWORD_WOOD || id === I.SWORD_STONE || id === I.SWORD_IRON ||
+          id === I.PICK_WOOD  || id === I.PICK_STONE  || id === I.PICK_IRON) { hasWeapon = true; break; }
+    if (!hasWeapon && botRng() < 0.35) loot.set(I.SWORD_WOOD, 1);
     botDropBag(b, loot);
     b.bag.clear();
   }
@@ -359,7 +374,10 @@ export function botDecide(b) {
   if (foe) { b.state = 'fight'; b.target = 'mob'; b.foe = foe; return; }
   if (b.hp < b.maxHp * 0.45) { b.state = 'home'; b.speakMsg = '得回家上药…'; return; }
   if (isNight() && Math.hypot(b.x - b.home[0], b.z - b.home[2]) > 26) { b.state = 'home'; return; }
-  if (b.bag.size > 0 && botBuildSite(b)) { b.state = 'build'; return; }
+  /* 手上有值得合成原料（木头/铁矿/圆石/煤）→ 先做工具/火把，把原料变强 */
+  if (botCanCraft(b)) { b.state = 'craft'; return; }
+  /* 有蓝图在盖、或攒够了建材 → 盖房（蓝图是一次性规划，断点续盖不受冷却限制） */
+  if (b.buildPlan || botHasBuildBlock(b)) { b.state = 'build'; return; }
   if (b.bag.size < b.bagCap && botFindOre(b)) { b.state = 'gather'; return; }
   b.state = 'idle';
   b.goal = null;
@@ -385,12 +403,143 @@ export function botNearestFoe(b, range) {
 export const BOT_WANT = { };
 export function botInitWant() {
   const want = [
-    I.LOG, I.PLANK, I.STONE, I.COBBLE, I.DIRT, I.SAND, I.STICK, I.COAL, I.IRON,
-    I.GLASS, I.BRICK, I.STONEBRICK, I.WOOL_WHITE, I.GLASS,
+    /* ⚠ 刻意**不**收 DIRT（泥土）：早先它们把挖来的泥土随手垒成小柱子，
+     * 满世界都是突兀的土堆，看着像「乱摆」。现在只采「像建材」的东西，
+     * 而且建造时（botPickBuildBlock）也只认建材，泥土绝不会被摆出来。
+     * SAND 保留：它能合成玻璃 / 沙岩，是像样的装饰建材；且建造白名单已排除沙子。 */
+    I.LOG, I.PLANK, I.STONE, I.COBBLE, I.SAND, I.STICK, I.COAL, I.IRON,
+    I.GLASS, I.BRICK, I.STONEBRICK, I.WOOL_WHITE,
   ];
   for (const id of want) if (id !== undefined && !BOT_WANT[id]) BOT_WANT[id] = 1;
 }
 botInitWant();
+
+/* ============================== AI 玩家：合成 ==============================
+ * 让它们会「把原料做成更强的东西」——木头→木板→木棍→工具，煤+木棍→火把。
+ * 复用 crafting.js 的**单一配方源**（RECIPES + recipeMatrix），形状与玩家合成
+ * 完全一致，不会自己另写一套导致和玩家配方漂移。
+ *
+ * ⚠ 木棍不在外面单独列：只在「要造工具但缺木棍」时才临时用木板搓 4 根，
+ * 否则会把攒来盖房的木板全变成木棍（那个坑踩过一次）。 */
+const BOT_CRAFT_OUT = [
+  I.PLANK,                                                     // 木头永远转木板（更省种类、也是建材）
+  I.PICK_WOOD, I.SWORD_WOOD, I.AXE_WOOD,                       // 木级工具（入门）
+  I.PICK_STONE, I.SWORD_STONE, I.AXE_STONE,                    // 石级（圆石+木棍）
+  I.PICK_IRON, I.SWORD_IRON, I.AXE_IRON,                       // 铁级（铁矿+木棍）—— 更强
+  I.TORCH,                                                     // 火把（煤+木棍）：装饰/光源，最后才考虑
+];
+/* 预编译每条配方的「材料需求」（id → 数量），避免每次匹配重算矩阵。 */
+export const BOT_CRAFT_RECIPES = [];
+for (const out of BOT_CRAFT_OUT) {
+  const r = RECIPES.find(x => x.out === out);
+  if (!r) continue;
+  const m = recipeMatrix(r.grid);
+  const need = new Map();
+  for (let rr = 0; rr < 3; rr++) for (let cc = 0; cc < 3; cc++) { const v = m[rr][cc]; if (v) need.set(v, (need.get(v) || 0) + 1); }
+  BOT_CRAFT_RECIPES.push({ out, n: r.n, need });
+}
+
+/* 试着合成一件东西（每次调用最多做成一件）。成功返回 true。
+ * 顺序即优先级：先消耗木头出木板，再逐级做工具，最后才做火把。 */
+export function botTryCraftOnce(b) {
+  for (const r of BOT_CRAFT_RECIPES) {
+    if (r.out === I.PLANK) {
+      if (botBagCount(b, I.LOG) >= 1) { botBagTake(b, I.LOG, 1); botBagAdd(b, I.PLANK, 4); return true; }
+      continue;
+    }
+    if (r.out === I.TORCH) {
+      // 火把是「锦上添花」，工具齐了、且手头刚好有煤和木棍才做
+      if (botBagCount(b, I.COAL) >= 1 && botBagCount(b, I.STICK) >= 1 && botBagCount(b, I.TORCH) < 8) {
+        botBagTake(b, I.COAL, 1); botBagTake(b, I.STICK, 1); botBagAdd(b, I.TORCH, 4); return true;
+      }
+      continue;
+    }
+    // 工具：已经有了就不重复造（升级逻辑自然覆盖——有木镐后才会去凑石/铁）
+    if (botBagCount(b, r.out) > 0) continue;
+    // 工具要木棍：不够就先用木板搓 4 根（仅当这件工具确实能造出来）
+    const stickNeed = r.need.get(I.STICK) || 0;
+    if (stickNeed > 0 && botBagCount(b, I.STICK) < stickNeed) {
+      if (botBagCount(b, I.PLANK) >= 2) { botBagTake(b, I.PLANK, 2); botBagAdd(b, I.STICK, 4); return true; }
+      continue;
+    }
+    let okAll = true;
+    for (const [id, n] of r.need) { if (id === I.STICK) continue; if (botBagCount(b, id) < n) { okAll = false; break; } }
+    if (!okAll) continue;
+    for (const [id, n] of r.need) botBagTake(b, id, n);
+    botBagAdd(b, r.out, r.n);
+    return true;
+  }
+  return false;
+}
+/* 手上还有「值得合成」的原料吗（决定要不要进 craft 状态）。 */
+export function botCanCraft(b) {
+  return botBagCount(b, I.LOG) > 0 || botBagCount(b, I.IRON) > 0
+      || botBagCount(b, I.COBBLE) > 0 || botBagCount(b, I.COAL) > 0;
+}
+
+/* ============================== AI 玩家：建造 ==============================
+ * 早先的 botBuild 只是「在家旁边垒一根最高 3 格的柱子」—— 满地土堆的来源。
+ * 现在改成**真的盖一间小屋**：4×4 地基、3 格高围墙（带门洞）、顶部一圈平顶，
+ * 蓝图一次规划、分多次执行（建材不够就先去采，回来接着盖）。
+ *
+ * 建造只用「建材白名单」里的方块，且**明确排除泥土/沙子/草**，从根本上杜绝
+ * 「乱摆泥土块」。 */
+export const BOT_BUILD_BLOCKS = [
+  I.PLANK, I.DARKPLANK, I.STONEBRICK, I.BRICK, I.COBBLE, I.STONE,
+  I.LOG, I.SANDSTONE, I.GLASS, I.WOOL_WHITE,
+];
+export function botPickBuildBlock(b) {
+  for (const id of BOT_BUILD_BLOCKS) if (botBagCount(b, id) > 0) return id;
+  return 0;
+}
+export function botHasBuildBlock(b) { return botPickBuildBlock(b) !== 0; }
+
+const HOUSE_W = 4, HOUSE_D = 4, HOUSE_H = 3;   // 4×4 占地、3 格高墙
+export function botStartHouse(b) {
+  for (let i = 0; i < 8; i++) {
+    const a = botRng() * Math.PI * 2, r = 3 + botRng() * 5;
+    const cx = Math.floor(b.home[0] + Math.cos(a) * r);
+    const cz = Math.floor(b.home[2] + Math.sin(a) * r);
+    const gy = botGroundY(cx, cz, Math.floor(b.y));
+    if (gy <= 0) continue;
+    // 四角地面高度差 <=1 且上方两格空，才算「平地基」
+    let okFoot = true;
+    for (const dx of [0, HOUSE_W - 1]) for (const dz of [0, HOUSE_D - 1]) {
+      const g2 = botGroundY(cx + dx, cz + dz, gy);
+      if (g2 <= 0 || Math.abs(g2 - gy) > 1) { okFoot = false; break; }
+    }
+    if (!okFoot) continue;
+    const ox = cx, oz = cz, oy = gy;
+    const plan = [];
+    for (let y = oy + 1; y <= oy + HOUSE_H; y++)
+      for (let x = ox; x < ox + HOUSE_W; x++)
+        for (let z = oz; z < oz + HOUSE_D; z++) {
+          const perim = (x === ox || x === ox + HOUSE_W - 1 || z === oz || z === oz + HOUSE_D - 1);
+          if (!perim) continue;
+          /* 门洞：前墙（z=oz）正中一列整面挖空（通高 3 格），这样门上方的墙块
+           * 不会有「下方悬空」的问题；屋顶对应位置也跳过，保持支撑链完整。 */
+          if (z === oz && x === ox + 1) continue;
+          plan.push({ x, y, z });
+        }
+    // 平顶环：坐在墙顶上
+    const ry = oy + HOUSE_H + 1;
+    for (let x = ox; x < ox + HOUSE_W; x++)
+      for (let z = oz; z < oz + HOUSE_D; z++) {
+        const perim = (x === ox || x === ox + HOUSE_W - 1 || z === oz || z === oz + HOUSE_D - 1);
+        if (!perim) continue;
+        // 跳过屋顶在门洞正上方那一格（下方无墙顶支撑）
+        if (z === oz && x === ox + 1) continue;
+        plan.push({ x, y: ry, z });
+      }
+    // 按 y 升序、同层按离原点距离，保证「从下往上、由近及远」地盖（有支撑）
+    plan.sort((p, q) => p.y - q.y || (Math.abs(p.x - ox) + Math.abs(p.z - oz)) - (Math.abs(q.x - ox) + Math.abs(q.z - oz)));
+    b.buildPlan = plan; b.buildIdx = 0; b.buildOrigin = [ox, oy, oz];
+    return true;
+  }
+  return false;
+}
+const BUILD_LINES = ['这间给你留着。', '盖好了，进来坐。', '嘿，新家！', '别踩我的墙。', '窗户还没装…'];
+export function pickBuildLine() { return BUILD_LINES[Math.floor(botRng() * BUILD_LINES.length) % BUILD_LINES.length]; }
 
 export function botFindOre(b) {
   const R = 13;
@@ -450,41 +599,44 @@ export function botGather(b, dt) {
   }
 }
 
-/* 建造：在「家附近」找一块空地，往上垒 2~3 个方块。
- * 刻意做得简陋（一个柱子 / 一小段墙），因为十个 AI 玩家真盖起房子
- * 会把玩家自己的地皮淹掉 —— 它们的定位是「路过的人」，不是「建筑师」。 */
-export function botBuildSite(b) {
-  if (!b.goal) {
-    for (let i = 0; i < 6; i++) {
-      const a = botRng() * Math.PI * 2, r = 2 + botRng() * 4;
-      const x = Math.floor(b.home[0] + Math.cos(a) * r), z = Math.floor(b.home[2] + Math.sin(a) * r);
-      const gy = botGroundY(x, z, Math.floor(b.y));
-      if (gy > 0 && !isSolid(getEffective(x, gy, z))) { b.goal = { x, y: gy, z }; break; }
-    }
-    if (!b.goal) return false;
-  }
-  // 目标格被占了（别人先盖了）→ 重挑
-  if (isSolid(getEffective(b.goal.x, b.goal.y, b.goal.z))) { b.goal = null; return false; }
-  return true;
-}
+/* 建造：按蓝图（b.buildPlan）逐格盖。蓝图是一次性规划好的有序格子列表，
+ * 分多次执行——背包装不下就先去采集，回来从断点接着盖（buildIdx 保留）。
+ * 只用建材白名单里的方块，绝不摆泥土/沙子。 */
 export function botBuild(b, dt) {
-  const g = b.goal;
-  if (!g) { b.state = 'idle'; return; }
-  botWalkTo(b, g.x + 0.5, g.z + 0.5, 1.9, dt);
-  if (Math.hypot(g.x + 0.5 - b.x, g.z + 0.5 - b.z) > 2.4) return;
-  // 从背包里挑一个能放的方块
-  let put = 0;
-  for (const id of b.bag.keys()) { if (isBlockId(id) && id !== I.WATER) { put = id; break; } }
-  if (!put) { b.goal = null; b.state = 'idle'; return; }
-  const h = Math.floor(b.y);
-  if (!isSolid(getEffective(g.x, g.y - 1, g.z)) || isSolid(getEffective(g.x, g.y, g.z))) { b.goal = null; return; }
-  setBlock(g.x, g.y, g.z, put);
+  if (!b.buildPlan) {
+    // 起新屋：要求攒够至少 12 个建材，且不在冷却里，免得把世界盖满
+    if (b.buildCd > 0 || botBagCount(b, botPickBuildBlock(b)) < 12) { b.state = 'idle'; return; }
+    if (!botStartHouse(b)) { b.state = 'idle'; return; }
+  }
+  const plan = b.buildPlan;
+  // 跳过已被占（别人/自己）的格子
+  while (b.buildIdx < plan.length && isSolid(getEffective(plan[b.buildIdx].x, plan[b.buildIdx].y, plan[b.buildIdx].z))) b.buildIdx++;
+  if (b.buildIdx >= plan.length) { b.buildPlan = null; b.buildCd = 25; b.state = 'idle'; b.speakMsg = pickBuildLine(); return; }
+
+  const c = plan[b.buildIdx];
+  botWalkTo(b, c.x + 0.5, c.z + 0.5, 1.9, dt);
+  if (Math.hypot(c.x + 0.5 - b.x, c.z + 0.5 - b.z) > 2.6) return;
+
+  const put = botPickBuildBlock(b);
+  if (!put) { b.state = 'gather'; return; }          // 没建材了 → 去采集，下次接着盖
+  // 支撑检查：底层（贴地）或下方一格是实心才放，避免悬空
+  if (c.y > b.buildOrigin[1] + 1 && !isSolid(getEffective(c.x, c.y - 1, c.z))) { b.buildIdx++; return; }
+
+  setBlock(c.x, c.y, c.z, put);
   botBagTake(b, put, 1);
   b.swingT = 0.28;
-  /* 柱子盖到 3 格高就收工，接着去别处 —— 不然会顶着柱子一直往上垒到天荒地老 */
-  g.y++;
-  if (g.y - (h + 1) >= 2) b.goal = null;
-  if (botRng() < 0.25) { b.goal = null; b.state = 'idle'; }
+  b.buildIdx++;
+  if (b.buildIdx >= plan.length) { b.buildPlan = null; b.buildCd = 25; b.state = 'idle'; b.speakMsg = pickBuildLine(); return; }
+  if (botRng() < 0.05) b.speakMsg = pickBuildLine();
+}
+
+/* 合成状态：每 ~0.5 秒试着做一件东西，做不动了就退出（去采集/盖房）。 */
+export function botCraft(b, dt) {
+  b.swingT = 0.18;
+  b.stateT += dt;
+  if (b.stateT < 0.5) return;
+  b.stateT = 0;
+  if (!botTryCraftOnce(b)) b.state = 'idle';
 }
 
 /* 战斗：打玩家（被还手时）或打身边的怪。玩家伤害固定 3 点，
@@ -569,11 +721,13 @@ export function botStep(b, dt) {
   if (botFreeze) { botPhysics(b, dt); return; }
   b.stateT += dt;
   b.think -= dt;
+  if (b.buildCd > 0) b.buildCd = Math.max(0, b.buildCd - dt);
   if (b.think <= 0) { b.think = 0.4 + botRng() * 0.5; botDecide(b); }
 
   switch (b.state) {
     case 'gather': botGather(b, dt); break;
     case 'build':  botBuild(b, dt);  break;
+    case 'craft':  botCraft(b, dt);  break;
     case 'fight':  botFight(b, dt);   break;
     case 'home':   botGoHome(b, dt);  break;
     case 'eat':    botEat(b, dt);     break;
