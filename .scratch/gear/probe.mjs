@@ -11,7 +11,43 @@ const mk = () => new Proxy(function () {}, {
   get: (t, k) => (k === 'then' || k === Symbol.toPrimitive ? undefined : mk()),
   set: () => true,
 });
-const el = mk();
+const GLC = new Proxy({}, { get: (t, k) => {
+  switch (k) {
+    case 'getAttribLocation': return () => 0;
+    case 'getUniformLocation': return () => ({});
+    case 'getShaderParameter': case 'getProgramParameter': return () => true;
+    case 'getShaderInfoLog': case 'getProgramInfoLog': return () => '';
+    case 'getParameter': return () => 4096;
+    case 'getExtension': return () => null;
+    case 'createShader': case 'createProgram': case 'createBuffer':
+    case 'createTexture': case 'createFramebuffer': case 'createRenderbuffer':
+    case 'createVertexArray': return () => ({});
+    case Symbol.toPrimitive: return undefined;
+  }
+  return () => GLC;
+} });
+/* 2D 上下文桩：`fillStyle = …` 这类赋值必须**不报错**，
+ * 否则 textures.js 的 P() 会在第一笔就抛（它每画一个像素就赋一次 fillStyle）。
+ * Proxy 的 target 是普通对象，未定义 set trap 时赋值会落到 target 上 —— 安全。 */
+const C2D = new Proxy({}, { get: (t, k) => {
+  if (k === 'createImageData' || k === 'getImageData')
+    return (w, h) => ({ data: new Uint8ClampedArray((w | 0) * (h | 0) * 4 || 4), width: w, height: h });
+  if (k === Symbol.toPrimitive) return undefined;
+  return () => C2D;
+} });
+/* ⚠ 这个 Proxy 必须显式实现 getContext：
+ * textures.js 在**模块顶层**就 `document.createElement('canvas').getContext('2d')`，
+ * 若只返回一个「什么属性都是函数」的空 Proxy，调用它会得到 undefined
+ * （Proxy 的 apply trap 没定义 → 返回 undefined），于是 alctx 是 undefined，
+ * buildAtlas 一进门就挂在 clearRect 上。 */
+const el = new Proxy(function () {}, {
+  get: (t, k) => {
+    if (k === 'getContext') return (type) => (String(type).startsWith('webgl') ? GLC : C2D);
+    if (k === 'then' || k === Symbol.toPrimitive) return undefined;
+    return mk();
+  },
+  set: () => true,
+});
 globalThis.document = new Proxy({
   createElement: () => el, createElementNS: () => el, getElementById: () => el,
   querySelector: () => el, querySelectorAll: () => [], addEventListener: noop,
@@ -32,27 +68,6 @@ globalThis.AudioContext = class {
   get destination() { return mk(); }
   get currentTime() { return 0; }
 };
-const GLC = new Proxy({}, { get: (t, k) => {
-  switch (k) {
-    case 'getAttribLocation': return () => 0;
-    case 'getUniformLocation': return () => ({});
-    case 'getShaderParameter': case 'getProgramParameter': return () => true;
-    case 'getShaderInfoLog': case 'getProgramInfoLog': return () => '';
-    case 'getParameter': return () => 4096;
-    case 'getExtension': return () => null;
-    case 'createShader': case 'createProgram': case 'createBuffer':
-    case 'createTexture': case 'createFramebuffer': case 'createRenderbuffer':
-    case 'createVertexArray': return () => ({});
-    case Symbol.toPrimitive: return undefined;
-  }
-  return () => GLC;
-} });
-const C2D = new Proxy({}, { get: (t, k) => {
-  if (k === 'createImageData' || k === 'getImageData')
-    return (w, h) => ({ data: new Uint8ClampedArray((w | 0) * (h | 0) * 4 || 4), width: w, height: h });
-  if (k === Symbol.toPrimitive) return undefined;
-  return () => C2D;
-} });
 const CTX_CANVAS = {
   width: 512, height: 512, style: {}, addEventListener: noop, removeEventListener: noop,
   getContext: (type) => (String(type).startsWith('webgl') ? GLC : C2D),
@@ -316,6 +331,33 @@ console.log('\n== 10. localStorage 存 / 读 / 删 ==');
 
   deleteSave();
   eq(hasSave(), false, 'deleteSave 之后没有存档');
+}
+
+console.log('\n== 11. 贴图生成器实际跑一遍 ==');
+{
+  /* 只数 TILE_NAMES 是不够的：真正的风险是某个图标生成器里有运行时错误
+   * （越界坐标、undefined 颜色、正则没命中掉进「肉」兜底…），
+   * 那种错只有 buildAtlas 真跑一遍才会暴露。 */
+  const { buildAtlas } = await import('../../src/game/textures.js');
+  let err = null;
+  try { buildAtlas(); } catch (e) { err = e; }
+  ok(!err, 'buildAtlas 画完全部贴图格' + (err ? '：' + err.message : ''));
+
+  /* 逐个点名新图标，确保它们各自的分支真的被走到过（而不是全落进兜底） */
+  const { itemTile } = await import('../../src/game/textures.js');
+  const names = [
+    'item_helm_cloth', 'item_chest_iron', 'item_legs_diamond', 'item_boots_starfall',
+    'item_shield_wood', 'item_shield_iron', 'item_staff_wither',
+    'item_dragon_scale', 'item_wither_bone', 'item_guardian_core',
+    'item_sword_starfall', 'item_axe_starfall', 'item_pick_starfall',
+  ];
+  let drew = 0;
+  for (const n of names) {
+    try { itemTile(n, 12345, [168, 120, 240]); drew++; } catch (e) {
+      console.error('    ' + n + ' 抛错: ' + e.message);
+    }
+  }
+  eq(drew, names.length, '13 个新图标生成器全部无异常');
 }
 
 console.log(`\n${fails === 0 ? '✅ 全部通过' : '❌ 失败 ' + fails + ' 项'}\n`);

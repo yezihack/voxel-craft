@@ -153,7 +153,7 @@ boss 系统（上一轮）掉的是钻石 / 金 / 黑曜石 —— 打 boss 的�
 
 ```
 npx vite build        → 103 modules，通过
-node .scratch/gear/probe.mjs → 全部通过（10 组、约 55 条断言）
+node .scratch/gear/probe.mjs → 全部通过（11 组、约 57 条断言）
 ```
 
 probe 覆盖：
@@ -167,6 +167,7 @@ probe 覆盖：
 8. boss 掉落（4/4/8，普通怪 0）
 9. 存档往返（方块 / 背包 / 槽位 / 盔甲 / 坐标 / 朝向 / 血量 / 饥饿 / dead 清除 / blocking 清除）
 10. localStorage 存 / 读 / 删（含「没存档时不抛错」「读档把坐标拨回」）
+11. **贴图生成器实跑**：`buildAtlas()` 画完全部 217 格 + 13 个新图标逐个点名调用
 
 ---
 
@@ -181,3 +182,13 @@ probe 覆盖：
    所以在 `mobs.js` 加 `setWorldTime()`。
 4. **`ui.saveRev` 版本号**：`localStorage` 变了但 Vue 侧没有响应式依赖，
    面板会一直显示旧摘要 —— 存 / 读 / 删档时 `saveRev++`，组件里读一下它即可。
+5. **挡板的 `document.createElement` 必须实现 `getContext`**：
+   `textures.js` 在**模块顶层**就 `document.createElement('canvas').getContext('2d')`。
+   若只返回一个「什么属性都是函数」的空 Proxy，调用它会得到 `undefined`
+   （Proxy 的 `apply` trap 没定义 → 返回 undefined），于是 `alctx` 是 undefined，
+   `buildAtlas()` 一进门就挂在 `clearRect` 上。
+   更隐蔽的是：**只数 `TILE_NAMES.length` 发现不了这个错** ——
+   必须真跑一遍 `buildAtlas()` 才能暴露。所以 probe 第 11 组专门做这件事。
+6. **单测图标生成器需要先建好 `alctx`**：`itemTile()` 依赖模块级的 `alctx` /
+   `tilePenX` / `tilePenY`，这些由 `buildAtlas()` 推进。
+   单独调 `itemTile` 之前必须先跑一次 `buildAtlas()`（或至少设置 `tilePenX/Y`）。
