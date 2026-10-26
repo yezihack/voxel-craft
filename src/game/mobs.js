@@ -24,6 +24,12 @@ export let worldTime = DAY_LEN * 0.18;         // 从清晨开始
 export const dayPhase = () => (worldTime % DAY_LEN) / DAY_LEN;
 /* 0.00 清晨 / 0.25 正午 / 0.50 黄昏 / 0.62 入夜 / 0.92 破晓 */
 export const isNight = () => { const t = dayPhase(); return t > 0.56 && t < 0.94; };
+/* 读档时把世界时间拨回存档那一刻。
+ * 必须是 setter：worldTime 是 `let`，ESM 的导入绑定只读，
+ * save.js 不能直接赋值（那会抛 TypeError）。 */
+export function setWorldTime(t) {
+  if (Number.isFinite(t) && t >= 0) worldTime = t;
+}
 
 /* ---------------- 生物表 ----------------
  * w = 碰撞半宽基准（实际用 w/2），h = 碰撞高度。
@@ -233,6 +239,9 @@ export const MOB_TYPES = {
     fly: { height: 6, amp: 2.0, freq: 1.2 },          // 盘旋飞行参数
     ranged: { min: 5, max: 20, cd: 1.6, speed: 18, dmg: 5 },  // 喷弹
     sight: 30, drop: I.DIAMOND, dropN: 3,
+    /* 星陨武器的主材料。4 个 = 一把星陨剑（3 龙鳞）+ 余一个，
+     * 也就是「打一场末影龙，够换一件武器」。 */
+    loot: [[I.DRAGON_SCALE, 4]],
     parts: [
       { box: [0.60, 0.50, 2.20], at: [0, 1.10, 0], tex: 'mob_dragon' },       // 长身
       { box: [0.50, 0.44, 0.50], at: [0, 1.30, 1.35], tex: 'mob_dragon' },    // 头
@@ -249,6 +258,8 @@ export const MOB_TYPES = {
     ranged: { min: 4, max: 18, cd: 1.2, speed: 16, dmg: 4 },
     witherBomb: { radius: 2.5, dmg: 6, cd: 4.5 },     // 周期爆破方块
     sight: 28, drop: I.OBSIDIAN, dropN: 2,
+    /* 法杖的主材料（4 个 = 一支凋灵法杖） */
+    loot: [[I.WITHER_BONE, 4]],
     parts: [
       { box: [0.70, 1.20, 0.50], at: [0, 1.30, 0], tex: 'mob_wither' },       // 主体
       { box: [0.44, 0.44, 0.44], at: [-0.66, 1.90, 0], tex: 'mob_wither_face' }, // 左头
@@ -265,6 +276,10 @@ export const MOB_TYPES = {
     dmg: 8, atkRange: 2.0, sight: 24,
     summonAdds: { type: 'slime_small', n: 2, cd: 6.0, cap: 4 }, // 周期召唤小史莱姆
     drop: I.GOLD, dropN: 4,
+    /* 星陨盔甲的主材料：一整套 4 件要 24 个，守卫每场掉 8 个 →
+     * 「打三场远古守卫，凑齐一套星陨甲」。它是三种 boss 里最肉的，
+     * 所以把最贵的材料挂在它身上。 */
+    loot: [[I.GUARDIAN_CORE, 8]],
     parts: [
       { box: [0.90, 1.00, 0.60], at: [0, 1.50, 0], tex: 'mob_guardian' },       // 躯干
       { box: [0.60, 0.56, 0.56], at: [0, 2.30, 0], tex: 'mob_guardian' },      // 头
@@ -891,6 +906,11 @@ export function updateMobs(dt, doSpawn = true) {
 export function mobDeathDrop(m) {
   const D = MOB_TYPES[m.type];
   if (D.drop) invAdd(D.drop, D.dropN || 1);
+  /* boss 专属战利品：星陨装备的**唯一**材料来源（见 config.js 的 262-264）。
+   * 数量固定、不掷骰 —— 打一场 boss 掉多少是可预期的，玩家才敢规划
+   * 「再打两场就能凑齐一套星陨甲」。掷骰的话终局装备会变成抽奖。
+   * 普通生物不登记 loot 字段，所以这条路对它们完全不生效。 */
+  if (D.loot) for (const [id, n] of D.loot) invAdd(id, n);
 }
 
 /* 异界刷怪的落点：从玩家所在高度向上下各找一个「脚下一格实心、上面两格空气」的位置。
@@ -1255,6 +1275,25 @@ export function shootArrowAt(m, R, foe) {
   m.atkT = R.cd;
   return true;
 }
+/* 凋灵法杖的魔法弹。
+ * 复用 arrows 数组（同一套子步进飞行 / 命中判定 / 寿命回收），只多一个字段：
+ *   magic: true → ① 几乎不受重力（见 updateArrows 的重力系数）
+ *                 ② 命中方块时炸出紫色的粒子而不是灰白灰
+ * 速度给到 26（比满蓄力的箭 37 慢、比半蓄力快）：法杖是「指哪打哪」，
+ * 不是「抛射」，飞太慢会让人以为打偏了。 */
+export function fireMagicBolt(dmg = 7) {
+  const p = player;
+  const cp = Math.cos(p.pitch), sp = Math.sin(p.pitch);
+  const dx = -Math.sin(p.yaw) * cp, dy = sp, dz = -Math.cos(p.yaw) * cp;
+  const v = 26;
+  arrows.push({
+    x: p.x + dx * 0.5, y: p.y + EYE - 0.1 + dy * 0.5, z: p.z + dz * 0.5,
+    vx: dx * v, vy: dy * v, vz: dz * v,
+    life: 2.6, dmg, magic: true,
+  });
+  setHandSwing(1);
+  return true;
+}
 /* 苦力怕爆炸：引信烧完的那一刻。三件事——
  *   ① 球形破坏方块（黑曜石级 hard>=6 炸不动；液体跳过，别把海抽干）
  *   ② 按距离衰减打玩家，并沿爆炸方向击退
@@ -1313,7 +1352,7 @@ export function updateArrows(dt) {
     const a = arrows[i];
     a.life -= dt;
     if (a.life <= 0) { arrows.splice(i, 1); continue; }
-    a.vy -= ARROW_GRAV * dt;
+    a.vy -= (a.magic ? ARROW_GRAV * 0.06 : ARROW_GRAV) * dt;
     /* 分子步进：满蓄力 37 格/秒、一帧走 0.6 格，不细分会直接穿过一格厚的墙 */
     const speed = Math.hypot(a.vx, a.vy, a.vz);
     const steps = Math.max(1, Math.ceil(speed * dt / 0.2));
@@ -1323,7 +1362,7 @@ export function updateArrows(dt) {
       a.x += a.vx * sdt; a.y += a.vy * sdt; a.z += a.vz * sdt;
       const by = Math.floor(a.y);
       if (by < 0 || by >= H || isSolid(getEffective(Math.floor(a.x), by, Math.floor(a.z)))) {
-        if (puff) puff(a.x, a.y, a.z, a.snow ? [238, 244, 252] : [168, 168, 172]);
+        if (puff) puff(a.x, a.y, a.z, a.magic ? [168, 120, 240] : a.snow ? [238, 244, 252] : [168, 168, 172]);
         arrows.splice(i, 1); gone = true; break;
       }
       /* 敌方弹药（骷髅的箭）只认玩家，压根不进生物循环 ——

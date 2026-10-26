@@ -20,6 +20,19 @@
 - 程序化贴图走 noiseTile 基础 + 覆盖层；物品蛋图标正则 `^item_egg_\w+$`
   自动走 `eggIconTile`，不占新格。boss 需显式登记 MOB_TILE_COLORS 基色。
 
+## 装备与存档约定
+- 减伤入口只有 `survival.hurt(n, reason, opts)`：环境伤害（摔落/缺氧/岩浆/
+  仙人掌/饥饿）必须传 `{pierce:true}`，外部打击不传 → 走护甲 + 盾牌减免。
+  护甲与盾牌**相乘**叠加，最低保留 1 点。
+- `armor.js` **只准依赖 config.js**，不能 import survival.js ——
+  否则 `survival → armor → survival` 成环，hurt() 拿不到减伤值。
+  背包的扣减/退回一律放 uiActions.js（那边才认识 inv）。
+- 存档 `save.js`：地形是纯函数**不入档**，只存「世界参数 + 8 维度 edits + 玩家状态」。
+  读档顺序：种子/世界类型 → 清 colCache+structShapeCache → 重建 dimEdits →
+  setDim → **重指 setEdits** → 时间 → 玩家 → 背包 → 盔甲 → 模式 → initChunks。
+  读档后必须清场（mobs/bots/掉落物/carts/arrows），`dead` 一律清掉。
+- 配方字符：26 个大写已被占满，新材料的字符只能用未占用的小写（d/t/u）。
+
 ## 无头测试（.scratch/<topic>/probe.mjs）踩坑
 - textures.js 顶部 `document.createElement('canvas')` 在 node 直跑会报
   `document is not defined`：probe 不要 import textures.js，改用迷你 BLOCKS 表

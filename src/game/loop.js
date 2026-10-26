@@ -5,7 +5,7 @@ import { doBreak, doBreakTimed, doPlace, particles, updateParticles } from './ac
 import { blip, noiseBurst } from './audio.js'
 import { bots, tryAttackAny, updateBotDrops, updateBots } from './bots.js'
 import { updateCarts } from './carts.js'
-import { CD, CW, D, EYE, I, LAVA_RECT, PORTAL_DIM, REACH, TEXEL, WATER_RECT } from './config.js'
+import { CD, CW, D, EYE, I, LAVA_RECT, PORTAL_DIM, REACH, SHIELD_OF, TEXEL, WATER_RECT } from './config.js'
 import { updateFluid } from './fluid.js'
 import { applyBelts, tickBlink, updatePads } from './transport.js'
 import { addLook, input } from './input.js'
@@ -14,6 +14,7 @@ import { VIEW_CX, VIEW_CZ, anchorGX, anchorGZ, buildChunk, chunks, shiftChunks }
 import { MOB_TYPES, fireArrow, updateArrows, updateMobs } from './mobs.js'
 import { player, raycast, updatePhysics } from './player.js'
 import { portalIdInPlayer, switchDim } from './portal.js'
+import { tickAutoSave } from './save.js'
 import { AMBIENT, FOG_FAR, FOG_HEIGHT, FOG_NEAR, SHADER_T, SKY, atlasTex, composite, drawArrows, drawBotDrops, drawBots, drawCarts, drawChunkBlend, drawChunkOpaque, drawHandView, drawMobs, ensureFbos, lineBuf, postOK, runBloom, sceneFbo, updateSkyColor, uploadChunk } from './post.js'
 import { canvas, gl, locLine, locMain, progLine, progMain } from './renderer.js'
 import { drawSky } from './sky.js'
@@ -110,6 +111,12 @@ export function frame(now) {
   if (lookVec.x || lookVec.y) addLook(lookVec.x * 11, lookVec.y * 11);
 
   if (running && !paused) {
+    /* 举盾：手持盾牌 + 按住右键 = 格挡中。
+     * 必须在 updatePhysics **之前**维护 —— 这一帧的移动减速（player.js 里读
+     * p.blocking）与伤害减免（survival.hurt 读同一个值）才是同一帧的口径。
+     * 创造 / 旁观模式不举盾：那两个模式本来就不吃伤害，举盾只是多余的动作。 */
+    player.blocking = mode === MODE.SURVIVAL && !player.dead
+      && placeHeld && !!SHIELD_OF[heldId()];
     updatePhysics(dt, input);
     /* 传送门：站在门方块里就切维度（冷却期内不重复触发）。
      * 紧跟 updatePhysics —— 用的是这一帧的位置，不然会有「一帧的延迟差」
@@ -168,6 +175,12 @@ export function frame(now) {
         blip(300 - pw * 120, 0.13, 'sawtooth', 0.05);
       }
     }
+    /* 自动存档：只在「真的在玩」时推进。
+     * 暂停 / 背包打开时不存 —— 那些时刻玩家可能在摆弄合成台，
+     * 存下来的半途状态读回去只会让人困惑。
+     * 存成功就 bump 一下 saveRev，让暂停面板上的摘要跟着更新。 */
+    const autoSave = tickAutoSave(dt, true);
+    if (autoSave && autoSave.ok) ui.saveRev++;
   } else {
     cancelDig();
     setTargetBlock(running ? raycast(REACH) : null);

@@ -5,7 +5,8 @@
  *
  * 注意这里读的是 **ui.mode / ui.selected**（响应式）而不是 state.js 里的
  * mode / selected —— 后者是给引擎读的普通模块变量，改了不会触发重渲染。 */
-import { BLOCKS, HOTBAR, ITEMS, defName } from './config.js'
+import { BLOCKS, HOTBAR, ITEMS, ARMOR_OF, ARMOR_PARTS, ARMOR_PART_NAME, defName } from './config.js'
+import { armorAt, armorPoints, armorReduction } from './armor.js'
 import { HOTBAR_N, SLOT_N, STORE_N, invCount, invSlots, pruneSlots } from './survival.js'
 import { MODE } from './state.js'
 import { ui } from './uiState.js'
@@ -69,4 +70,29 @@ export function bagSubtitle() {
       ' 格 · 点储物格与当前快捷格对调 · 拖到合成格可当材料'
     : '点击任意方块放入当前选中的格子（方块 ' + allPlaceableIds().length +
       ' 种 + 工具武器物品 ' + allItemIds().length + ' 种）'
+}
+
+/* 盔甲四槽的视图（背包面板左侧那一列）。
+ * 空槽也返回 —— 得让人看得见「这里还能穿什么」，而不是穿了才出现。
+ * 顺序固定为 ARMOR_PARTS（头 / 胸 / 腿 / 脚），和经典那套一致。 */
+export function armorSlotsView() {
+  return ARMOR_PARTS.map((part) => {
+    const id = armorAt(part)
+    const a = ARMOR_OF[id]
+    return {
+      part,
+      label: ARMOR_PART_NAME[part],
+      id,
+      name: id ? defName(id) : '',
+      pts: a ? a.pts : 0,
+      empty: !id,
+    }
+  })
+}
+
+/* 护甲总览：点数 + 减伤百分比（HUD 与面板共用） */
+export function armorSummary() {
+  const pts = armorPoints()
+  const red = armorReduction()
+  return { pts, red, pct: Math.round(red * 100) }
 }

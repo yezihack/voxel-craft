@@ -2,7 +2,8 @@ import { reactive } from 'vue'
 
 /* 生存模式：背包 Map、挖掘计时、饥饿 / 氧气 / 摔落伤害 —— 迁移自 voxel-craft.html 第 5653-5919 行 */
 
-import { BLOCKS, EYE, HOTBAR, I, ITEMS, PW, breakTime, dropCountOf, dropOf, setHeldIdReader } from './config.js'
+import { BLOCKS, EYE, HOTBAR, I, ITEMS, PW, SHIELD_OF, breakTime, dropCountOf, dropOf, setHeldIdReader } from './config.js'
+import { armorReduction } from './armor.js'
 import { getEffective } from './generate.js'
 import { input } from './input.js'
 import { clamp } from './math.js'
@@ -98,8 +99,12 @@ export function pruneSlots() {
 
 export let deathReason = '';                  // 最近一次死亡的原因文案（界面层直接拿来显示）
 
-/* reason 可选：岩浆/僵尸/摔落… —— 不传就由界面层按环境猜 */
-export function hurt(n, reason) {
+/* reason 可选：岩浆/僵尸/摔落… —— 不传就由界面层按环境猜。
+ * opts.pierce = true 表示「无视护甲与盾牌」：环境伤害（摔落 / 缺氧 /
+ * 岩浆 / 仙人掌 / 饥饿）走这一路，因为护甲挡的是打击，挡不住缺氧和坠落势能；
+ * 而且如果连饥饿都能被护甲挡掉，「吃东西」这个循环就彻底没意义了。
+ * 外部调用（僵尸近战 / 骷髅箭 / 苦力怕爆炸）不传 pierce → 照常被减免。 */
+export function hurt(n, reason, opts) {
   const p = player;
   if (n <= 0 || p.dead) return -1;
   /* 只有生存模式会受伤。创造免疫一切伤害，这里是最外层的兜底。
@@ -109,6 +114,21 @@ export function hurt(n, reason) {
    * 「创造模式被僵尸打死」。放在 hurt 里而不是调用点，是为了以后新增伤害源
    * 时不用再记得补一遍判断。旁观模式同理：观察者不该被世界碰伤。 */
   if (mode !== MODE.SURVIVAL) return -1;
+  /* 护甲 + 盾牌：两者都是「减伤」而不是「免伤」，所以最低保留 1 点 ——
+   * 否则穿齐星陨套举着铁盾就能在岩浆里泡澡，那就不叫生存模式了；
+   * 而「血条纹丝不动」也会让玩家失去对危险的判断。 */
+  if (!(opts && opts.pierce)) {
+    const red = armorReduction();
+    let cut = red > 0 ? n * (1 - red) : n;
+    /* 举盾：只有手持盾牌且处于格挡状态才生效（见 loop.js 对 blocking 的维护）。
+     * 盾与甲相乘叠加：星陨套(72%) + 铁盾(68%) → 只剩 9% 伤害，
+     * 这正是「终局装备」该有的手感，而 1 点下限保证它仍然是「会疼」。 */
+    if (p.blocking) {
+      const s = SHIELD_OF[heldId()];
+      if (s) cut *= (1 - s.block);
+    }
+    if (cut < n) n = Math.max(1, Math.round(cut));
+  }
   p.hp = Math.max(0, p.hp - n);
   p.hurtFlash = 0.42;
   if (onHurt) onHurt(n);
@@ -173,7 +193,7 @@ export function updateSurvival(dt, input) {
   else if (p.onGround) {
     if (p.fallPeak !== null) {
       const d = p.fallPeak - p.y;
-      if (d > SURV.fallSafe) hurt(Math.min(20, Math.floor(d - SURV.fallSafe) + 1), '你摔死了');
+      if (d > SURV.fallSafe) hurt(Math.min(20, Math.floor(d - SURV.fallSafe) + 1), '你摔死了', { pierce: true });
       p.fallPeak = null;
     }
   } else if (p.fallPeak === null) p.fallPeak = p.y;
@@ -186,7 +206,7 @@ export function updateSurvival(dt, input) {
     if (p.air <= 0) {
       p.air = 0;
       p.drownT += dt;
-      if (p.drownT >= SURV.drownDelay) { p.drownT = 0; hurt(SURV.drownDps, '你溺水了'); }
+      if (p.drownT >= SURV.drownDelay) { p.drownT = 0; hurt(SURV.drownDps, '你溺水了', { pierce: true }); }
     }
   } else {
     p.air = Math.min(p.maxAir, p.air + dt * SURV.airRefill);
@@ -200,7 +220,7 @@ export function updateSurvival(dt, input) {
       p.lavaT = 0;
       // lavaDps 是「每秒」伤害，这里按 tick 周期折算 —— 直接拿它当每次伤害的话
       // 实际是 4 / 0.5s = 8 点/秒，满血 2.5 秒烧死，根本来不及游出来
-      hurt(SURV.lavaDps * SURV.lavaTick, '你被岩浆吞没了');
+      hurt(SURV.lavaDps * SURV.lavaTick, '你被岩浆吞没了', { pierce: true });
     }
   } else p.lavaT = 0;
 
@@ -217,7 +237,7 @@ export function updateSurvival(dt, input) {
       }
   if (touched) {
     p.cactusT += dt;
-    if (p.cactusT >= SURV.cactusTick) { p.cactusT = 0; hurt(touched, '你被仙人掌扎死了'); }
+    if (p.cactusT >= SURV.cactusTick) { p.cactusT = 0; hurt(touched, '你被仙人掌扎死了', { pierce: true }); }
   } else p.cactusT = 0;
 
   // 饥饿：静止也会慢慢消耗，跑动快得多
@@ -243,7 +263,7 @@ export function updateSurvival(dt, input) {
   // 饿死
   if (p.food <= 0) {
     p.starveT += dt;
-    if (p.starveT >= SURV.starveInterval) { p.starveT = 0; hurt(1, '你饿死了'); }
+    if (p.starveT >= SURV.starveInterval) { p.starveT = 0; hurt(1, '你饿死了', { pierce: true }); }
   } else p.starveT = 0;
 }
 

@@ -3,11 +3,11 @@
 import { toast } from './uiState.js'
 import { MODE, mode, running, setHandSwing } from './state.js'
 import { blip, noiseBurst } from './audio.js'
-import { BLOCKS, DIM_N, EGG_OF, EYE, H, I, ITEMS, PORTAL_BLOCK, REACH, SUMMON_OF } from './config.js'
+import { BLOCKS, DIM_N, EGG_OF, EYE, H, I, ITEMS, PORTAL_BLOCK, REACH, SHIELD_OF, STAFF_OF, SUMMON_OF } from './config.js'
 import { carts, isRail, raycastCart, spawnCart, boardCart } from './carts.js'
 import { DIMS } from './dims.js'
 import { getEffective, isLiquid, isSolid, setBlock } from './generate.js'
-import { MOB_CAP, MOB_TYPES, mobs, spawnMob, summonGolem } from './mobs.js'
+import { MOB_CAP, MOB_TYPES, fireMagicBolt, mobs, spawnMob, summonGolem } from './mobs.js'
 import { insideSelf, player, raycast } from './player.js'
 import { ignitePortal } from './portal.js'
 import { collectDrop, heldId, invCount, invTake, tryEat } from './survival.js'
@@ -72,6 +72,13 @@ export function doPlace() {
       if (tryBlink() && mode === MODE.SURVIVAL) invTake(id, 1);
       return;
     }
+    /* 盾牌：右键是**举盾**，不是放置。真正的格挡状态由主循环按
+     * 「手持盾 + 按住右键」维护（见 loop.js），这里只负责吞掉这次放置，
+     * 否则会在脚下贴一块木板。 */
+    if (SHIELD_OF[id]) return;
+    /* 法杖：右键发射一枚魔法弹（有冷却，冷却期内连按不生效）。
+     * 冷却用挂钟时间而不是帧累计 —— 这样在低帧率下也不会「按十次出十发」。 */
+    if (STAFF_OF[id]) { tryCastStaff(id); return; }
     if (tryEat(id)) { noiseBurst(0.09, 0.05, 700); blip(520, 0.10, 'sine', 0.05); }
     return;
   }
@@ -153,6 +160,23 @@ export function trySummon(id) {
   blip(150, 0.26, 'triangle', 0.07);
   return true;
 }
+
+/* 法杖的冷却。用挂钟时间戳（秒）而不是每帧累减：
+ * 低帧率下「按十次出十发」是最容易漏掉的作弊口子，时间戳天然免疫。 */
+let staffReadyAt = 0;
+export function tryCastStaff(id) {
+  const s = STAFF_OF[id];
+  if (!s) return false;
+  const now = performance.now() / 1000;
+  if (now < staffReadyAt) return false;
+  staffReadyAt = now + s.cd;
+  fireMagicBolt(s.dmg);
+  noiseBurst(0.12, 0.07, 1400);
+  blip(720, 0.12, 'sawtooth', 0.05);
+  return true;
+}
+/* 仅供测试与读档复位：把冷却清零，让下一次施法立即生效 */
+export function resetStaffCd() { staffReadyAt = 0; }
 
 /* 右键「刷怪蛋」→ 在准星指着的方块顶上放出一只对应生物。
  * 与傀儡核心的 summonGolem 不同：这里不查 canSummonAt —— 那是傀儡专用的放置规则。

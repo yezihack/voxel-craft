@@ -456,6 +456,25 @@ Object.assign(I, {
    * boss 不进昼夜刷新池、不参与距离回收 —— 只能由玩家主动召唤。
    * 战利品掉落稀有材料（钻石 / 金 / 黑曜石），让打 boss 有收益。 */
   EGG_DRAGON: 259, EGG_WITHER: 260, EGG_GUARDIAN: 261,
+  /* ---------------- 星陨级装备 ----------------
+   * 三种 boss 的专属战利品（唯一来源，只能靠打 boss 拿）：
+   *   龙鳞 / 凋灵骨 / 守卫核心 —— 也是全部星陨装备的唯一材料。
+   *
+   * 星陨（tier 5）比钻石高一档：它是「打完 boss 才配拥有」的装备，
+   * 数值上刻意压着走（伤害 +2、挖掘 ×16），不追求让钻石作废，
+   * 只保证「值得为它去打一场 boss」。 */
+  DRAGON_SCALE: 262, WITHER_BONE: 263, GUARDIAN_CORE: 264,
+  SWORD_STARFALL: 265, AXE_STARFALL: 266, PICK_STARFALL: 267,
+  /* 凋灵法杖：右键发射一枚穿透弹（不是放置），走 staff 字段分派 */
+  STAFF_WITHER: 268,
+  /* 盔甲：4 部位 × 4 材质。id 按「材质成组、部位连续」排列 ——
+   * 同一材质 4 件连号，肉眼对表时不容易串行。 */
+  HELM_CLOTH: 269, CHEST_CLOTH: 270, LEGS_CLOTH: 271, BOOTS_CLOTH: 272,
+  HELM_IRON: 273, CHEST_IRON: 274, LEGS_IRON: 275, BOOTS_IRON: 276,
+  HELM_DIAMOND: 277, CHEST_DIAMOND: 278, LEGS_DIAMOND: 279, BOOTS_DIAMOND: 280,
+  HELM_STARFALL: 281, CHEST_STARFALL: 282, LEGS_STARFALL: 283, BOOTS_STARFALL: 284,
+  /* 盾牌：按住右键格挡，按 block 比例减伤 */
+  SHIELD_WOOD: 285, SHIELD_IRON: 286,
 });
 
 /* 物品表（非方块）：食物等，右键使用。
@@ -566,6 +585,57 @@ export const ITEMS = {
    * 必须在那里先按 id 分派（见 actions.js）。 */
   257: { name:'矿车',   n:'车', color:[176,180,190], tex:'minecart' },
   258: { name:'传送珠', n:'珠', color:[136, 92,236], tex:'blink' },
+
+  /* ---------------- 星陨级装备 ----------------
+   * 三种 boss 材料是**唯一来源**（见 mobs.js 的 BOSS_LOOT）。
+   * 它们不进任何「日常」配方，只用来做星陨装备 —— 所以玩家看到龙鳞，
+   * 第一反应就该是「我攒够一套了没」。 */
+  262: { name:'龙鳞',     n:'鳞', color:[ 92, 58,148], tex:'dragon_scale' },
+  263: { name:'凋灵骨',   n:'骨', color:[ 70, 64, 74], tex:'wither_bone' },
+  264: { name:'守卫核心', n:'核', color:[236,206, 92], tex:'guardian_core' },
+
+  /* 星陨三件套：和木/石/铁/金/钻石同一套 tool 元数据，只是 tier = 5。
+   * 贴图沿用 item_<kind>_<tier> 的命名规则，图标自动走 toolIconTile ——
+   * 无需为它们单独写生成器。 */
+  265: { name:'星陨剑',   n:'陨', color:[168,120,240], tex:'sword_starfall', tool:{ kind:'sword', tier:5 } },
+  266: { name:'星陨战斧', n:'陨', color:[168,120,240], tex:'axe_starfall',   tool:{ kind:'axe',   tier:5 } },
+  267: { name:'星陨镐',   n:'陨', color:[168,120,240], tex:'pick_starfall',  tool:{ kind:'pick',  tier:5 } },
+
+  /* 凋灵法杖：右键射出一枚紫黑魔法弹。
+   * staff 字段是唯一的元数据来源（和 tool / summon / core 同构）：
+   * dmg = 单发伤害，cd = 发射间隔（秒）。 */
+  268: { name:'凋灵法杖', n:'杖', color:[120, 96,160], tex:'staff_wither', staff:{ dmg:7, cd:0.85 } },
+
+  /* ---------------- 盔甲 ----------------
+   * armor 字段 = { part, pts }：
+   *   part = head / chest / legs / feet（决定穿在哪个槽）
+   *   pts  = 护甲点数（见 ARMOR_OF 与 armor.js 的减伤公式）
+   * 四套材质按「布 → 铁 → 钻石 → 星陨」递进，整套点数 7 / 15 / 20 / 24。
+   * 布甲刻意用羊毛（植物纤维）—— 本作没有皮革，硬加一种动物掉落
+   * 只会让「第一件护甲」变得比铁甲还难拿。 */
+  269: { name:'布盔',   n:'盔', color:[196,168,128], tex:'helm_cloth',     armor:{ part:'head',  pts:1 } },
+  270: { name:'布甲',   n:'甲', color:[196,168,128], tex:'chest_cloth',    armor:{ part:'chest', pts:3 } },
+  271: { name:'布腿',   n:'腿', color:[196,168,128], tex:'legs_cloth',     armor:{ part:'legs',  pts:2 } },
+  272: { name:'布靴',   n:'靴', color:[196,168,128], tex:'boots_cloth',    armor:{ part:'feet',  pts:1 } },
+  273: { name:'铁盔',   n:'盔', color:[214,214,218], tex:'helm_iron',      armor:{ part:'head',  pts:2 } },
+  274: { name:'铁甲',   n:'甲', color:[214,214,218], tex:'chest_iron',     armor:{ part:'chest', pts:6 } },
+  275: { name:'铁腿',   n:'腿', color:[214,214,218], tex:'legs_iron',      armor:{ part:'legs',  pts:5 } },
+  276: { name:'铁靴',   n:'靴', color:[214,214,218], tex:'boots_iron',     armor:{ part:'feet',  pts:2 } },
+  277: { name:'钻石盔', n:'盔', color:[ 92,226,232], tex:'helm_diamond',   armor:{ part:'head',  pts:3 } },
+  278: { name:'钻石甲', n:'甲', color:[ 92,226,232], tex:'chest_diamond',  armor:{ part:'chest', pts:8 } },
+  279: { name:'钻石腿', n:'腿', color:[ 92,226,232], tex:'legs_diamond',   armor:{ part:'legs',  pts:6 } },
+  280: { name:'钻石靴', n:'靴', color:[ 92,226,232], tex:'boots_diamond',  armor:{ part:'feet',  pts:3 } },
+  281: { name:'星陨盔', n:'盔', color:[168,120,240], tex:'helm_starfall',  armor:{ part:'head',  pts:4 } },
+  282: { name:'星陨甲', n:'甲', color:[168,120,240], tex:'chest_starfall', armor:{ part:'chest', pts:9 } },
+  283: { name:'星陨腿', n:'腿', color:[168,120,240], tex:'legs_starfall',  armor:{ part:'legs',  pts:7 } },
+  284: { name:'星陨靴', n:'靴', color:[168,120,240], tex:'boots_starfall', armor:{ part:'feet',  pts:4 } },
+
+  /* ---------------- 盾牌 ----------------
+   * shield 字段 = { block }：格挡时按这个比例减伤（0.5 = 挡掉一半）。
+   * 木盾便宜、铁盾更硬；两者都不消耗耐久 —— 本作没有耐久系统，
+   * 加一套「盾会碎」的账只会让格挡变成一件要算计的苦差事。 */
+  285: { name:'木盾', n:'盾', color:[150,112, 72], tex:'shield_wood', shield:{ block:0.50 } },
+  286: { name:'铁盾', n:'盾', color:[214,214,218], tex:'shield_iron', shield:{ block:0.68 } },
 };
 for (const k in ITEMS) ITEMS[k].id = +k;
 /* 维度号 → 核心物品 id。建在 ITEMS 之后（要读 core 字段），
@@ -575,10 +645,12 @@ for (const k in ITEMS) if (ITEMS[k].core !== undefined) CORE_ITEM[ITEMS[k].core]
 
 /* --- 工具元数据：倍率 / 伤害 ---
  * 倍率是「挖对材质时的时间除数」：2 表示耗时减半。
- * 金是特例 —— 挖得最快、打人最软（12 倍速但只有木级的伤害），是经典取舍。 */
-export const ITEM_TIER_NAME = ['木', '石', '铁', '金', '钻石'];
-export const TIER_SPEED = [2, 4, 6, 12, 8];
-export const TIER_DMG   = [1, 2, 3, 1, 4];
+ * 金是特例 —— 挖得最快、打人最软（12 倍速但只有木级的伤害），是经典取舍。
+ * 星陨（tier 5）是 boss 材料做的终局档：挖掘 ×16、伤害 +6，
+ * 刻意只比钻石各高一档 —— 让「打 boss」有明确收益，又不至于让钻石装备作废。 */
+export const ITEM_TIER_NAME = ['木', '石', '铁', '金', '钻石', '星陨'];
+export const TIER_SPEED = [2, 4, 6, 12, 8, 16];
+export const TIER_DMG   = [1, 2, 3, 1, 4, 6];
 export const KIND_DMG   = { sword: 3, axe: 2, pick: 1, shovel: 1 };
 export const KIND_NAME  = { pick: '镐', axe: '斧', shovel: '锹', sword: '剑' };
 export const FIST_DMG   = 2;                 // 空手：猪 10 血要打 5 下
@@ -593,6 +665,25 @@ for (const k in ITEMS) if (ITEMS[k].summon) SUMMON_OF[k] = ITEMS[k].summon;
  * 和 SUMMON_OF 分开：核心只召唤傀儡，蛋对任何生物都成立。 */
 export const EGG_OF = {};
 for (const k in ITEMS) if (ITEMS[k].spawn) EGG_OF[k] = ITEMS[k].spawn;
+/* id → { part, pts }，只收带 armor 字段的物品（盔甲槽与减伤都查这张表）。
+ * 和 TOOL_OF 同一个套路：物品定义里只写「是哪一件」，数值一律从这张表读。 */
+export const ARMOR_OF = {};
+for (const k in ITEMS) if (ITEMS[k].armor) ARMOR_OF[k] = ITEMS[k].armor;
+/* 盔甲四槽的固定顺序与显示名。定义在常量段（而不是 armor.js），
+ * 是因为 itemTip 也要用 —— config.js 是叶模块，反过来引 armor.js 会成环。 */
+export const ARMOR_PARTS = ['head', 'chest', 'legs', 'feet'];
+export const ARMOR_PART_NAME = { head: '头盔', chest: '胸甲', legs: '护腿', feet: '靴子' };
+/* id → { block }，只收带 shield 字段的物品（格挡减伤查这张表） */
+export const SHIELD_OF = {};
+for (const k in ITEMS) if (ITEMS[k].shield) SHIELD_OF[k] = ITEMS[k].shield;
+/* id → { dmg, cd }，只收带 staff 字段的物品（右键远程） */
+export const STAFF_OF = {};
+for (const k in ITEMS) if (ITEMS[k].staff) STAFF_OF[k] = ITEMS[k].staff;
+/* 三张表建好之后再定义判定函数（虽然箭头函数是惰性求值，
+ * 但把定义放在被引用者之后读起来才不会以为有 TDZ 坑）。 */
+export const isArmorItem = (id) => !!ARMOR_OF[id];
+export const isShieldItem = (id) => !!SHIELD_OF[id];
+export const isStaffItem = (id) => !!STAFF_OF[id];
 /* 物品贴图也要占贴图集的格子 */
 for (const k in ITEMS) registerTile('item_' + ITEMS[k].tex, null);
 /* 生物贴图（不挂在方块上，单独登记并指定基色） */
@@ -690,6 +781,9 @@ export function itemTip(id) {
     const good = TIER_SPEED[d.tool.tier];
     return `（${KIND_NAME[d.tool.kind]} · 对口材质 ×${good} · 伤害 ${TIER_DMG[d.tool.tier] + KIND_DMG[d.tool.kind]}）`;
   }
+  if (d.armor) return `（${ARMOR_PART_NAME[d.armor.part]} · 护甲 +${d.armor.pts} · 点一下穿上）`;
+  if (d.shield) return `（按住右键格挡 · 挡掉 ${Math.round(d.shield.block * 100)}% 伤害）`;
+  if (d.staff) return `（右键发射魔法弹 · 伤害 ${d.staff.dmg} · 冷却 ${d.staff.cd}s）`;
   if (d.food) return `（食物，右键吃，+${d.food} 饥饿）`;
   if (id === I.BOW) return '（按住右键蓄力，松手射出）';
   if (id === I.ARROW) return '（弓的弹药）';

@@ -32,6 +32,12 @@ export const ui = reactive({
   /* ---- 世界 ---- */
   worldFlat: false,            // 世界类型：false = 经典起伏，true = 超平坦
 
+  /* ---- 存档 ----
+   * saveRev 是一个「版本号」：每次存 / 读 / 删档都 +1。
+   * 组件里读 saveStatus() 时顺手读一下它，就能在存档变化后重算 ——
+   * 否则 localStorage 变了但 ui 上没有任何响应式依赖，面板会一直显示旧摘要。 */
+  saveRev: 0,
+
   /* ---- 弹层 ---- */
   veilVisible: true,           // 开始 / 暂停遮罩
   veilHint: '点击后会锁定鼠标，按 <b>Esc</b> 可以随时退出',

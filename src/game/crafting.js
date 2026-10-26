@@ -61,6 +61,13 @@ export function craftKeyTable() {
     n: I.BONE,         // 骨头   → 骷髅
     y: I.SPIDER_EYE,   // 蛛眼   → 蜘蛛
     s: I.SLIMEBALL,    // 粘液球 → 史莱姆
+    /* boss 材料（星陨装备的唯一材料，见下面「星陨级装备」配方段）。
+     * ⚠ 26 个大写字母已全部占满（方块 + 工具 + 蛋壳），
+     *   所以这三味只能用**未被占用的小写**：d / t / u。
+     *   助记：d = Dragon，t = wiTher，u = gUardian。 */
+    d: I.DRAGON_SCALE,   // 龙鳞
+    t: I.WITHER_BONE,    // 凋灵骨
+    u: I.GUARDIAN_CORE,  // 守卫核心
   };
 }
 export const CRAFT_KEY = craftKeyTable();
@@ -217,6 +224,59 @@ export const RECIPES = [
   { out: I.PAD,            n: 2, grid: ['GGG', 'TQT', 'GGG'] },      // 玻璃 + 红石 + 石英 → 2 传送板
   { out: I.MINECART,       n: 1, grid: ['R R', 'RRR'] },             // 5 铁 → 矿车
   { out: I.BLINK,          n: 2, grid: ['QQQ', 'QTQ', 'QQQ'] },      // 石英壳 + 红石芯 → 2 传送珠
+
+  /* ---------------- 盔甲 ----------------
+   * 形状沿用经典那套（盔 = 一排 + 两侧护耳、甲 = 双肩 + 胸腹、腿 = 三段、靴 = 两段），
+   * 四种材质只换材料字符 —— 玩家学会一套形状就等于会做全部 16 件。
+   *
+   * 材质与点数（整套）：布 7 / 铁 15 / 钻石 20 / 星陨 24。
+   * 布甲用羊毛：本作没有皮革，硬加一种动物掉落只会让「第一件护甲」
+   * 比铁甲还难拿 —— 而它存在的意义恰恰是「进矿洞前有个心理缓冲」。
+   *
+   * ⚠ 逐条核对过与既有配方不同形或不同料：
+   *   布盔(WWW/W W) 与刷怪蛋(WW/WM) 尺寸不同；
+   *   铁甲(R R/RRR/RRR) 与铁傀儡核心(RRR/RUR/RRR) 只差中间那格；
+   *   钻石腿(YYY/Y Y/Y Y) 与钻石镐(YYY/ J / J ) 只差下面两行。 */
+  { out: I.HELM_CLOTH,     n: 1, grid: ['WWW', 'W W'] },
+  { out: I.CHEST_CLOTH,    n: 1, grid: ['W W', 'WWW', 'WWW'] },
+  { out: I.LEGS_CLOTH,     n: 1, grid: ['WWW', 'W W', 'W W'] },
+  { out: I.BOOTS_CLOTH,    n: 1, grid: ['W W', 'W W'] },
+  { out: I.HELM_IRON,      n: 1, grid: ['RRR', 'R R'] },
+  { out: I.CHEST_IRON,     n: 1, grid: ['R R', 'RRR', 'RRR'] },
+  { out: I.LEGS_IRON,      n: 1, grid: ['RRR', 'R R', 'R R'] },
+  { out: I.BOOTS_IRON,     n: 1, grid: ['R R', 'R R'] },
+  { out: I.HELM_DIAMOND,   n: 1, grid: ['YYY', 'Y Y'] },
+  { out: I.CHEST_DIAMOND,  n: 1, grid: ['Y Y', 'YYY', 'YYY'] },
+  { out: I.LEGS_DIAMOND,   n: 1, grid: ['YYY', 'Y Y', 'Y Y'] },
+  { out: I.BOOTS_DIAMOND,  n: 1, grid: ['Y Y', 'Y Y'] },
+
+  /* ---------------- 星陨级装备（boss 材料） ----------------
+   * 三种 boss 材料分工明确，避免「攒了一堆某种材料却没处花」：
+   *   龙鳞 d   → 星陨武器（打）
+   *   守卫核心 u → 星陨盔甲（扛）
+   *   凋灵骨 t  → 凋灵法杖（远程）
+   * 武器形状照抄木/石/铁/金/钻石那一套，只换材料 —— 玩家不用重学一遍。
+   *
+   * 成本口径（一场 boss 的掉落 = 龙鳞 4 / 凋灵骨 4 / 守卫核心 8）：
+   *   一把星陨剑 3 龙鳞 → 一场末影龙；
+   *   一支法杖 3 凋灵骨 → 一场凋灵；
+   *   整套星陨甲 24 守卫核心 → 三场远古守卫。
+   * 也就是「凑齐一套终局装备 ≈ 打五场 boss」，不短但也不至于让人放弃。 */
+  { out: I.SWORD_STARFALL, n: 1, grid: ['d', 'd', 'J'] },
+  { out: I.AXE_STARFALL,   n: 1, grid: ['dd ', 'dJ ', ' J '] },
+  { out: I.PICK_STARFALL,  n: 1, grid: ['ddd', ' J ', ' J '] },
+  { out: I.STAFF_WITHER,   n: 1, grid: ['ttt', ' J ', ' J '] },
+  { out: I.HELM_STARFALL,  n: 1, grid: ['uuu', 'u u'] },
+  { out: I.CHEST_STARFALL, n: 1, grid: ['u u', 'uuu', 'uuu'] },
+  { out: I.LEGS_STARFALL,  n: 1, grid: ['uuu', 'u u', 'u u'] },
+  { out: I.BOOTS_STARFALL, n: 1, grid: ['u u', 'u u'] },
+
+  /* ---------------- 盾牌 ----------------
+   * 形状是「盾面 + 中间的握把（木棍）+ 下方的尖端」。
+   * 木盾 5 木板就够 —— 它是「第一次遇到骷髅」时最该有的东西；
+   * 铁盾要 6 铁矿，挡得更多（68% vs 50%），是中期升级。 */
+  { out: I.SHIELD_WOOD, n: 1, grid: ['PJP', 'PPP', ' P '] },
+  { out: I.SHIELD_IRON, n: 1, grid: ['RJR', 'RRR', ' R '] },
 ];
 
 /* 把配方网格规整成 3×3 的 id 矩阵（不足补 0） */

@@ -29,6 +29,18 @@ const moreLabel = computed(() => (ui.bagExpanded
   ? '收起背包（只看前 2 排）'
   : `展开背包全部格子（还有 ${hiddenRows.value} 排 · 共 ${all.value.length} 格）`))
 
+/* 点格子的分派：
+ *   护甲 → 穿上（不是选中）—— 否则玩家点了一件铁甲，只是把它挪到快捷栏，
+ *          还得再想办法「装备」，多一步就多一次困惑；
+ *   其余 → 原有的选中 / 对调行为。 */
+function pickSlot(s) {
+  if (s.id && engine.isArmorItem && engine.isArmorItem(s.id)) {
+    engine.equipArmorItem(s.id)
+    return
+  }
+  engine.clickInvSlot(s.i)
+}
+
 function titleOf(s) {
   return s.id
     ? s.name + ' ×' + s.count + engine.itemTip(s.id) + (s.hot ? `（快捷格 ${s.i + 1}）` : '')
@@ -43,7 +55,7 @@ function titleOf(s) {
       <ItemSlot
         v-for="s in hotRow" :key="s.i" variant="islot" :id="s.id" :name="s.name"
         :count="s.count" :key-label="String(s.i + 1)" :title="titleOf(s)" :on="s.on"
-        @pick="engine.clickInvSlot(s.i)"
+        @pick="pickSlot(s)"
       />
     </div>
     <div class="invlab">
@@ -55,7 +67,7 @@ function titleOf(s) {
     >
       <ItemSlot
         v-for="s in row" :key="s.i" variant="islot" :id="s.id" :name="s.name"
-        :count="s.count" :title="titleOf(s)" @pick="engine.clickInvSlot(s.i)"
+        :count="s.count" :title="titleOf(s)" @pick="pickSlot(s)"
       />
     </div>
     <button class="invmore" @click="engine.toggleBagExpand()">{{ moreLabel }}</button>

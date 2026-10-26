@@ -26,6 +26,11 @@ export const player = {
   exhaust: 0,           // 消耗度，攒满 4 扣 1 点饥饿
   hurtFlash: 0,         // 受伤红屏剩余时间
   drownT: 0, lavaT: 0, cactusT: 0, regenT: 0, starveT: 0,
+  /* 举盾格挡中。由主循环每帧维护（手持盾牌 + 按住右键），
+   * survival.js 的 hurt() 读它决定要不要按盾牌比例减伤。
+   * 放在 player 上而不是单独的模块变量：它和 hp/food 一样是「玩家此刻的状态」，
+   * 存档时也该跟着走（读档瞬间手里正举着盾就继续举着，不必让玩家重按）。 */
+  blocking: false,
 };
 
 /* 沿单轴移动并解决与方块的碰撞（AABB 扫掠的简化逐轴解法） */
@@ -86,6 +91,9 @@ export function updatePhysics(dt, input) {
   const sprint = input.shift && !p.fly ? 1.45 : 1;
   let speed = (p.fly ? 13 : p.inLava ? 1.7 : p.inWater ? 3.4 : 4.9) * sprint;
   if (input.sprint) speed *= 1.25;
+  /* 举盾时挪不快：挡得住就打不快、走得慢，这是格挡该有的代价。
+   * 取 0.42 而不是 0.2 —— 太低会让「举着盾撤退」变成原地挨打。 */
+  if (p.blocking) speed *= 0.42;
 
   /* 旁观模式：穿墙观战飞行。和创造飞行两条区别 ——
    *   ① 不走 moveBodyAxis：不碰撞 = 穿墙，钻到地形里看矿脉专用

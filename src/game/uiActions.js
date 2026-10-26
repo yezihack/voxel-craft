@@ -3,22 +3,25 @@
  * 所有「用户点了界面上某个东西」要触发的逻辑都在这里导出，组件只管调用，
  * 不去碰引擎内部状态。原先散落在 onclick / addEventListener 里的代码全部收拢到此。 */
 import { audio, blip } from './audio.js'
-import { despawnAllBots } from './bots.js'
+import { armorAt, armorPoints, armorReduction, setArmorPiece } from './armor.js'
+import { despawnAllBots, despawnAllBotDrops } from './bots.js'
 import { despawnAllCarts } from './carts.js'
-import { defName, HOTBAR } from './config.js'
+import { ARMOR_OF, ARMOR_PART_NAME, HOTBAR, defName } from './config.js'
 import {
   craftAutoFill, craftClearAt, craftResult, craftSlots,
   clearCraft, doCraft, recipeBookEntries, recipeMissing,
 } from './crafting.js'
+import { DIMS } from './dims.js'
 import { input, keys } from './input.js'
 import { clamp } from './math.js'
 import { chunks } from './mesher.js'
-import { despawnAllMobs, surfaceY } from './mobs.js'
+import { arrows, despawnAllMobs, surfaceY } from './mobs.js'
 import { player } from './player.js'
 import { canvas } from './renderer.js'
-import { HOTBAR_N, activeSlots, cancelDig, respawn } from './survival.js'
+import { countEdits, deleteSave, hasSave, loadGame, saveGame, saveMeta } from './save.js'
+import { HOTBAR_N, activeSlots, cancelDig, invAdd, invCount, invTake, respawn } from './survival.js'
 import {
-  MODE, SEED, bowCharge, breakHeld, flatWorld, lookVec, mode, paused, placeHeld,
+  MODE, SEED, bowCharge, breakHeld, dim, flatWorld, lookVec, mode, paused, placeHeld,
   placeRepeat, running, selected, setBowCharge, setBreakHeld, setColCache,
   setColCacheSeed, setFlatWorld, setModeState, setPaused, setPlaceHeld,
   setPlaceRepeat, setRunning, setSelected, setSpectate, setStructShapeCache,
@@ -220,6 +223,114 @@ export function closeBag(silent) {
 }
 
 export function toggleBag() { ui.bagOpen ? closeBag() : openBag() }
+
+/* ---------------- 盔甲 ----------------
+ * 背包里点一件护甲 → 穿到对应槽；点槽位 → 脱下来回背包。
+ *
+ * 扣减顺序刻意是「先扣背包、再写槽位」：反过来的话，一旦 invTake 失败
+ * （背包里其实没有），槽位上会凭空多出一件无中生有的护甲。
+ * 创造模式不扣也不退 —— 那边本来就没有背包账。 */
+export function equipArmorItem(id) {
+  const a = ARMOR_OF[id]
+  if (!a) return false
+  const surv = mode === MODE.SURVIVAL
+  if (surv && !invCount(id)) return false
+  const old = armorAt(a.part)
+  if (surv) {
+    if (!invTake(id, 1)) return false
+    if (old) invAdd(old, 1)
+  }
+  setArmorPiece(a.part, id)
+  blip(760, 0.07, 'sine', 0.045)
+  toast(`🛡 穿上${defName(id)}（${ARMOR_PART_NAME[a.part]} · 护甲 +${a.pts}）`)
+  return true
+}
+
+export function unequipArmorSlot(part) {
+  const id = armorAt(part)
+  if (!id) return false
+  setArmorPiece(part, 0)
+  if (mode === MODE.SURVIVAL) invAdd(id, 1)
+  blip(420, 0.06, 'sine', 0.04)
+  toast(`脱下${defName(id)}（已放回背包）`)
+  return true
+}
+
+/* 护甲总点数 / 减伤百分比 —— 给 HUD 与背包面板显示 */
+export const armorStat = () => ({ pts: armorPoints(), red: armorReduction() })
+
+/* ---------------- 存档 ---------------- */
+
+/* 手动存档。返回 saveGame() 的结果，UI 自己决定要不要弹提示。 */
+export function saveNow(announce = true) {
+  const r = saveGame()
+  ui.saveRev++
+  if (!announce) return r
+  if (r.ok) {
+    const kb = Math.max(1, Math.round(r.bytes / 1024))
+    toast(`💾 已存档 · ${kb} KB · ${countEdits()} 格改动`)
+    blip(880, 0.10, 'sine', 0.06)
+  } else {
+    toast(r.reason === 'quota' ? '⚠ 存档失败：浏览器存储空间已满' : '⚠ 存档失败：无法序列化当前世界')
+    blip(180, 0.12, 'square', 0.05)
+  }
+  return r
+}
+
+/* 读档：应用之后**必须清场**。
+ * 生物 / AI 玩家 / 矿车 / 飞行中的箭，它们的坐标都属于上一份世界 ——
+ * 不清的话会出现「一只僵尸卡在新世界的岩壁里」这种穿帮
+ * （和 switchDim 里那几行是同一个理由）。 */
+export function loadNow() {
+  const r = loadGame()
+  if (!r.ok) {
+    toast(r.reason === 'none' ? '还没有存档 —— 先按 F5 存一次' : '⚠ 存档版本不兼容，无法读取')
+    blip(180, 0.12, 'square', 0.05)
+    return r
+  }
+  ui.saveRev++
+  despawnAllMobs()
+  despawnAllBots()
+  despawnAllBotDrops()
+  despawnAllCarts()
+  arrows.length = 0
+  cancelDig()
+  /* UI 侧的派生状态跟着引擎走：ui.mode / ui.survival / ui.worldFlat
+   * 是组件判断「显示哪套面板」的依据，不同步的话读档后会停在错误的界面。 */
+  ui.mode = mode
+  ui.survival = mode === MODE.SURVIVAL
+  ui.worldFlat = flatWorld
+  ui.selected = selected
+  ui.flyTag = player.fly ? '(开)' : '(关)'
+  ui.deathVisible = false
+  if (ui.bagOpen) closeBag(true)
+  toast(`📂 已读档 · ${DIMS[dim].name} · ${countEdits()} 格改动`)
+  blip(660, 0.12, 'sine', 0.06)
+  return r
+}
+
+/* 删档 + 重开。
+ * 不做「逐项重置内存状态」—— 引擎里该重置的东西太多（缓存 / 区块 / 生物 /
+ * 传送门 / 运输装置…），漏一个就是幽灵 bug。重载页面是唯一可靠的重置。 */
+export function newWorld() {
+  deleteSave()
+  ui.saveRev++
+  blip(300, 0.14, 'triangle', 0.05)
+  if (typeof location !== 'undefined' && location.reload) location.reload()
+}
+
+/* 存档摘要（开始面板 / 暂停面板上显示） */
+export function saveStatus() {
+  if (!hasSave()) return null
+  const m = saveMeta()
+  if (!m) return null
+  const d = new Date(m.t)
+  const pad = (n) => String(n).padStart(2, '0')
+  const when = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+  const dimName = DIMS[m.dim] ? DIMS[m.dim].name : '主世界'
+  const modeName = m.mode === MODE.SURVIVAL ? '生存' : m.mode === MODE.SPECTATOR ? '旁观' : '创造'
+  return { when, dimName, modeName, blocks: m.blocks | 0, flat: !!m.flat }
+}
 
 /* ---------------- 死亡与重生 ---------------- */
 

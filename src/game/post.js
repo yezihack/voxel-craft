@@ -887,12 +887,17 @@ export function drawHandView(cam, proj) {
   gl.uniform1i(locMain.uAtlas, 0);
 
   const s = g.flat ? 0.32 : 0.24;
-  let m = M4.trans(0.34 + bob * 0.02 - arc * 0.05,
-                   -0.26 - Math.abs(bob) * 0.02 + arc * 0.07,
-                   -0.62 + arc * 0.06);
-  m = M4.mul(m, M4.rotY(-0.50 - arc * 0.25));
+  /* 举盾：把手上物往上抬、往画面中间收、略微转正 ——
+   * 玩家一眼就能看出「盾举起来了」，而不是只能靠 HUD 上那两个字。
+   * blk 只在手持盾牌且按住右键时为 1（见 loop.js），
+   * 所以拿别的东西时这一段完全等价于改动前。 */
+  const blk = player.blocking ? 1 : 0;
+  let m = M4.trans(0.34 + bob * 0.02 - arc * 0.05 - blk * 0.15,
+                   -0.26 - Math.abs(bob) * 0.02 + arc * 0.07 + blk * 0.11,
+                   -0.62 + arc * 0.06 - blk * 0.07);
+  m = M4.mul(m, M4.rotY(-0.50 - arc * 0.25 + blk * 0.32));
   m = M4.mul(m, M4.rotX(0.14 - arc * 0.95));
-  m = M4.mul(m, M4.rotZ(-0.24 - arc * 0.45));
+  m = M4.mul(m, M4.rotZ(-0.24 - arc * 0.45 + blk * 0.12));
   m = M4.mul(m, M4.scale(s, s, s));
   gl.uniformMatrix4fv(locMain.uModel, false, m);
   bindHand(g);

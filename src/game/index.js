@@ -17,19 +17,22 @@ export { setTagHook, ui } from './uiState.js'
 
 /* 界面动作 */
 export {
-  clearCraftAll, clearCraftSlot, clickInvSlot, closeBag, pickLibraryItem, pickMode,
-  pickRecipe, pickWorldType, respawnAndStart, selectSlot, setInputKey, setLook,
+  clearCraftAll, clearCraftSlot, clickInvSlot, closeBag, equipArmorItem,
+  loadNow, newWorld, pickLibraryItem, pickMode, pickRecipe, pickWorldType,
+  respawnAndStart, saveNow, saveStatus, selectSlot, setInputKey, setLook,
   setStick, startGame, takeCraftResult, toggleBagExpand, toggleFly,
+  unequipArmorSlot,
 } from './uiActions.js'
 
 /* 派生数据 */
 export {
-  allItemIds, allPlaceableIds, bagSubtitle, hotbarSlots, invSlotsView, totalStore, usedStore,
+  allItemIds, allPlaceableIds, armorSlotsView, armorSummary, bagSubtitle,
+  hotbarSlots, invSlotsView, totalStore, usedStore,
 } from './selectors.js'
 
 /* 常量与查询 */
 export { HOTBAR_N, heldId } from './survival.js'
 export { craftResult, craftSlots, recipeBookEntries, recipeMissing } from './crafting.js'
-export { defName, itemTip } from './config.js'
+export { defName, itemTip, isArmorItem, isShieldItem, isStaffItem } from './config.js'
 export { isoIcon } from './textures.js'
 export { MODE } from './state.js'

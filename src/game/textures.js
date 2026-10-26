@@ -1026,6 +1026,81 @@ export function toolIconTile(kind, c) {
   }
 }
 
+/* 盔甲图标：四个部位各一个轮廓。
+ * 刻意**不按材质**分别画 —— 16 件共用这 4 个形状，材质靠 ITEMS[id].color 区分，
+ * 和工具「同一形状换材质」保持一致：玩家一眼看出「这是胸甲」，
+ * 再看颜色就知道「这是铁的还是钻石的」。 */
+export function armorIconTile(part, c) {
+  const L = shade(c, 46), D = shade(c, -58), E = shade(c, -96);
+  const rect = (x0, y0, x1, y1, col) => {
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) PQ(x, y, col);
+  };
+  if (part === 'head') {
+    /* 头盔：拱顶 + 两侧护耳 + 深色面甲开口 */
+    rect(3, 3, 12, 12, c);
+    rect(5, 1, 10, 2, c);                 // 顶部收窄
+    rect(5, 6, 10, 11, E);                // 面甲开口（深色，一眼认出是头盔）
+    rect(5, 1, 9, 1, L);                  // 高光
+    rect(3, 12, 12, 12, D);               // 底缘
+    PQ(3, 3, D); PQ(12, 3, D);
+  } else if (part === 'chest') {
+    /* 胸甲：双肩宽、腰身窄，中间一条竖脊 */
+    rect(2, 3, 13, 6, c);                 // 肩
+    rect(4, 7, 11, 13, c);                // 躯干
+    rect(7, 3, 8, 13, L);                 // 竖脊
+    rect(2, 6, 13, 6, D);
+    rect(4, 13, 11, 13, D);
+    PQ(2, 3, D); PQ(13, 3, D);
+    PQ(3, 4, L); PQ(12, 4, L);
+  } else if (part === 'legs') {
+    /* 护腿：腰环 + 两条腿（中间留缝，和靴子区分开） */
+    rect(3, 2, 12, 4, c);                 // 腰
+    rect(3, 5, 6, 14, c);                 // 左腿
+    rect(9, 5, 12, 14, c);                // 右腿
+    rect(3, 2, 12, 2, L);
+    rect(4, 5, 5, 14, L); rect(10, 5, 11, 14, L);
+    rect(3, 14, 6, 14, D); rect(9, 14, 12, 14, D);
+  } else {
+    /* 靴子：两只 L 形，靴头朝内 —— 和护腿的「两条直腿」拉开距离 */
+    rect(2, 7, 6, 13, c); rect(2, 13, 8, 14, c);
+    rect(9, 7, 13, 13, c); rect(7, 13, 13, 14, c);
+    rect(2, 7, 6, 7, L); rect(9, 7, 13, 7, L);
+    rect(2, 14, 8, 14, D); rect(7, 14, 13, 14, D);
+  }
+}
+
+/* 盾牌图标：上宽下尖的盾面 + 中央十字徽记 + 左上受光。
+ * 木盾 / 铁盾共用同一个形状，只靠 color 区分 —— 和盔甲同一套约定。 */
+export function shieldIconTile(c) {
+  const L = shade(c, 46), D = shade(c, -62);
+  for (let y = 2; y <= 15; y++) {
+    const inset = y <= 8 ? 2 : 2 + Math.floor((y - 8) * 0.85);
+    for (let x = inset; x <= 15 - inset; x++) {
+      const edge = (x === inset || x === 15 - inset || y === 2 || y === 15);
+      PQ(x, y, edge ? D : shade(c, (hash2(x, y, 7) - 0.5) * 14));
+    }
+  }
+  /* 徽记：竖梁 + 横臂 */
+  for (let y = 4; y <= 11; y++) { PQ(7, y, L); PQ(8, y, L); }
+  for (let x = 5; x <= 10; x++) { PQ(x, 6, L); PQ(x, 7, L); }
+  PQ(3, 4, shade(c, 70)); PQ(4, 3, shade(c, 70));   // 左上高光
+}
+
+/* 法杖图标：斜杆 + 顶端紫黑光球（内芯提亮）。
+ * 法杖是「远程武器」，所以顶端必须有发光点 —— 和近战武器一眼分得开。 */
+export function staffIconTile(c) {
+  const glow = shade(c, 72);
+  PL2(4, 15, 10, 7, WOOD_HANDLE_DK, 0, 1);          // 杖杆
+  for (let y = 1; y <= 7; y++) for (let x = 9; x <= 15; x++) {
+    const dx = x - 12, dy = y - 4;
+    if (dx * dx + dy * dy > 9) continue;
+    PQ(x, y, dx + dy < -1 ? glow : shade(c, (hash2(x, y, 3) - 0.5) * 18));
+  }
+  PQ(11, 3, [242, 224, 255]); PQ(12, 3, [242, 224, 255]);
+  PQ(11, 4, glow); PQ(12, 4, glow);
+  PQ(6, 12, WOOD_HANDLE); PQ(7, 11, WOOD_HANDLE);   // 缠绳
+}
+
 /* 弓 / 箭 / 木棍：同样按 16×16 逻辑格画 */
 export function propIconTile(name, c) {
   if (name === 'item_bow') {
@@ -1154,6 +1229,13 @@ export function itemTile(name, s, c) {
   /* --- 工具 / 武器 / 弹药：按 item_<kind>_<tier> 前缀分派 --- */
   const m = /^item_(pick|axe|shovel|sword)_/.exec(name);
   if (m) return toolIconTile(m[1], c);
+  /* --- 盔甲 / 盾牌 / 法杖 ---
+   * 同样必须各自单开一支：掉进下面「肉」兜底的话，16 件盔甲会全长得像猪排。
+   * 盔甲按**部位**分形状、按 color 分材质 —— 和工具「同一形状换材质」同一个思路。 */
+  const am = /^item_(helm|chest|legs|boots)_/.exec(name);
+  if (am) return armorIconTile(am[1], c);
+  if (/^item_shield/.test(name)) return shieldIconTile(c);
+  if (name === 'item_staff_wither') return staffIconTile(c);
   if (name === 'item_bow' || name === 'item_arrow' || name === 'item_stick') return propIconTile(name, c);
   /* --- 运输：矿车 / 传送珠 ---
    * 同样必须单开一支：掉进下面「肉」兜底分支的话，矿车会画成一块生肉。 */
@@ -1167,6 +1249,51 @@ export function itemTile(name, s, c) {
   if (gm) return golemCoreIcon(gm[1], s, c);
   /* --- 维度核心：菱形宝石。同样必须单开一支，否则掉进「肉」兜底。 --- */
   if (/^item_core_\w+$/.test(name)) return dimCoreIcon(s, c);
+  /* --- boss 材料：星陨装备的三味原料 ---
+   * 三者形状刻意拉开：鳞（扇贝纹）/ 骨（带关节）/ 核心（菱形星芒）。 */
+  if (name === 'item_dragon_scale') {
+    /* 一片龙鳞：上宽下收的盾形 + 两圈同心纹 */
+    for (let y = 2; y <= 14; y++) {
+      const inset = 2 + Math.max(0, y - 9);
+      for (let x = inset; x <= 15 - inset; x++) {
+        const d = Math.abs(x - 7.5) + Math.abs(y - 8) * 0.8;
+        PQ(x, y, (d > 3.4 && d < 4.6) || d < 1.2 ? shade(c, 40) : shade(c, (hash2(x, y, s) - 0.5) * 16));
+      }
+    }
+    PL(4, 6, 11, 6, shade(c, -54));
+    PL(5, 10, 10, 10, shade(c, -46));
+    PQ(3, 3, shade(c, 62)); PQ(4, 2, shade(c, 62));
+    return;
+  }
+  if (name === 'item_wither_bone') {
+    /* 凋灵骨：比普通骨头更短更粗，中缝一道暗线 */
+    for (let y = 4; y <= 12; y++) for (let x = 6; x <= 10; x++)
+      PQ(x, y, shade(c, (hash2(x, y, s) - 0.5) * 12));
+    for (const ey of [2, 12]) {
+      PQ(5, ey, c); PQ(6, ey, c); PQ(10, ey, c); PQ(11, ey, c);
+      PQ(5, ey + 1, shade(c, -22)); PQ(11, ey + 1, shade(c, -22));
+    }
+    PL(8, 5, 8, 11, shade(c, -48));
+    PQ(7, 3, shade(c, 34)); PQ(9, 13, shade(c, -30));
+    return;
+  }
+  if (name === 'item_guardian_core') {
+    /* 守卫核心：菱形多面体 + 四向星芒 + 中心白芯 */
+    for (let y = 3; y <= 12; y++) for (let x = 3; x <= 12; x++) {
+      const dx = x - 7.5, dy = y - 7.5;
+      const man = Math.abs(dx) + Math.abs(dy);
+      if (man > 6.4) continue;
+      PQ(x, y, shade(c, (hash2(x, y, s) - 0.5) * 16 - (man > 4.6 ? 34 : 0)));
+    }
+    for (const [ox, oy] of [[0, -1], [0, 1], [-1, 0], [1, 0]])
+      for (let k = 1; k <= 2; k++) {
+        const px = Math.round(7.5 + ox * (5 + k)), py = Math.round(7.5 + oy * (5 + k));
+        if (px >= 1 && px <= 14 && py >= 1 && py <= 14) PQ(px, py, shade(c, 80));
+      }
+    PQ(7, 7, [255, 250, 220]); PQ(8, 7, [255, 250, 220]);
+    PQ(7, 8, [255, 250, 220]); PQ(8, 8, [255, 250, 220]);
+    return;
+  }
   /* --- 材料掉落物：火药 / 骨头 / 蛛眼 / 粘液球 ---
    * 必须单开一支：掉进下面「肉」兜底分支的话四样全长得像猪排。
    * 坐标走 PQ/PL 的 16×16 逻辑格，与 TP 解耦（和食物那段同一个理由）。 */

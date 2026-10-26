@@ -8,7 +8,7 @@ import { camEye } from './loop.js'
 import { clamp } from './math.js'
 import { MOB_TYPES, raycastMob } from './mobs.js'
 import { player } from './player.js'
-import { closeBag, selectSlot, setMode, toggleBag } from './uiActions.js'
+import { closeBag, loadNow, saveNow, selectSlot, setMode, toggleBag } from './uiActions.js'
 import { toast, ui } from './uiState.js'
 import { canvas } from './renderer.js'
 import { HOTBAR_N, cancelDig, respawn } from './survival.js'
@@ -81,6 +81,12 @@ window.addEventListener('keydown', (e) => {
     blip(660, .12, 'sine', .06);
   }
   if (k >= 'Digit1' && k <= 'Digit9') selectSlot(+k.slice(5) - 1);
+  /* F5 存档 / F9 读档。
+   * F5 是浏览器刷新键，**必须** preventDefault —— 否则玩家一按就把进度刷没了，
+   * 而这恰恰是「存档」这个动作最不该有的副作用。暂停面板里也有同样的两个按钮，
+   * 万一某个浏览器拦不住 F5，玩家仍有别的入口。 */
+  if (k === 'F5') { e.preventDefault(); saveNow(true); }
+  if (k === 'F9') { e.preventDefault(); loadNow(); }
   if (k === 'Escape') { if (ui.bagOpen) closeBag(); /* 其余交给 pointerlockchange */ }
 });
 window.addEventListener('keyup', (e) => {

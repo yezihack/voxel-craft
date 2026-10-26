@@ -1,13 +1,15 @@
 <script setup>
 import { computed } from 'vue'
 import { MODE, engine, ui } from '../engine.js'
+import ArmorPanel from './ArmorPanel.vue'
 import BlockLibrary from './BlockLibrary.vue'
 import CraftBox from './CraftBox.vue'
 import InventoryPanel from './InventoryPanel.vue'
 
 /* 方块库（创造）/ 背包（生存）。同一个面板，按模式换内容：
- *   生存 → 标题「背包」+ 合成台 + 54 格背包
- *   创造 → 标题「方块库」+ 全部方块与物品 */
+ *   生存 → 标题「背包」+ 合成台 + 盔甲栏 + 54 格背包
+ *   创造 → 标题「方块库」+ 全部方块与物品
+ * 盔甲栏只在生存模式出现：创造模式不吃伤害，穿甲没有任何可观测效果。 */
 const surv = computed(() => ui.mode === MODE.SURVIVAL)
 const title = computed(() => (surv.value ? '背包' : '方块库'))
 const sub = computed(() => (engine.bagSubtitle ? engine.bagSubtitle() : ''))
@@ -19,6 +21,7 @@ const sub = computed(() => (engine.bagSubtitle ? engine.bagSubtitle() : ''))
       <h2>{{ title }}</h2>
       <div class="sub">{{ sub }}</div>
       <CraftBox v-if="surv" />
+      <ArmorPanel v-if="surv" />
       <InventoryPanel v-if="surv" />
       <BlockLibrary v-else />
     </div>
