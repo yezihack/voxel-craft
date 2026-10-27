@@ -55,7 +55,8 @@ pointer 与 touch 两套监听各算一次，灵敏度直接翻倍。
 ```
 
 - 左摇杆：移动（与改造前一致，仍然直接写 DOM 小圆点，不进响应式 diff）
-- 右下 2×2：挖 / 放（74px，按得最勤）+ 跳 / 潜（60px）
+- 右下 2×2：四颗一样大（68px），上排跳 / 潜，下排挖 / 放（主色描边）。
+  大小一致是有意的 —— 拇指落点不该先分辨尺寸，靠颜色区分功能就够
 - 右上：背包 / 模式 / 飞行 / 菜单
 - 砍掉了原来的「右摇杆转头」：拇指要先找准圆心才敢动，远不如「哪儿都能滑」
 
@@ -104,7 +105,8 @@ cycleMode()     // 与键盘 G 共用同一个入口，避免两处逻辑跑偏
 
 ```
 npx vite build                     → 99 modules，通过
-node .scratch/mobile/probe.mjs     → 静态断言全过
+node .scratch/mobile/probe.mjs     → 39 条静态断言全过
+node .scratch/mobile/shot.mjs      → 真 Chromium 触屏上下文，量出下面这组数字
 ```
 
 probe 断言内容（纯文本扫描，不依赖 GL / DOM）：
@@ -116,3 +118,22 @@ probe 断言内容（纯文本扫描，不依赖 GL / DOM）：
 5. 引擎门面导出了 `touchMine` / `touchPlace` / `cycleMode` / `toggleBag` / `pauseGame`
 6. `input.js` 的画布触摸只做 `addLook`，不再有 `setBreakHeld` / 长按定时器
 7. 触屏渲染倍率上限是 1.5
+
+### 实机尺寸实测（`shot.mjs`，Playwright + 本机 Chromium）
+
+| 视口 | 快捷栏 | 摇杆 | 动作区 | 重叠 |
+|------|--------|------|--------|------|
+| 844×390（横屏） | 189..655 × 320..382 | 18..122 × 208..312 | 700..828 × 186..314 | 无 |
+| 390×844（竖屏） | 11..379 × 782..838 | 18..136 × 626..744 | 228..374 × 598..744 | 无 |
+
+两档下左上角 `.hud` 均为 `null`（已彻底移除），9 格快捷栏都没有溢出屏幕。
+
+`shot.mjs` 需要 playwright：不装进项目依赖，从 npx 缓存 require，并直接指向
+本机已装的 Chromium（版本比包期望的新一档，用 `executablePath` 绕过）。
+
+```
+npx vite preview --port 4173 &
+PW_ROOT=<npm-cache>/_npx/<hash>/node_modules node .scratch/mobile/shot.mjs
+```
+
+截图落在 `.scratch/mobile/*.png`，已在 `.gitignore` 里排除（可随时重新生成）。

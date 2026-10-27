@@ -3,6 +3,9 @@ dist
 dist-ssr
 *.local
 
+# 截图产物：由 .scratch/mobile/shot.mjs 随时重新生成，别把几 MB 的 PNG 塞进仓库
+.scratch/**/*.png
+
 # 编辑器 / 系统
 .vscode/*
 !.vscode/extensions.json

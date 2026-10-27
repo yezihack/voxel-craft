@@ -61,7 +61,7 @@ function startNew() {
         <div><b>左摇杆</b> 走路</div>
         <div><b>滑动画面</b> 转视角</div>
         <div><b>挖 / 放</b> 右下两个大按钮</div>
-        <div><b>背包 / 模式 / 飞行</b> 右上三个按钮</div>
+        <div><b>背包 / 模式 / 飞行 / 菜单</b> 右上</div>
       </div>
       <div v-else class="keys">
         <div v-for="(k, i) in VEIL_KEYS" :key="i"><kbd>{{ k.key }}</kbd> {{ k.text }}</div>
@@ -76,7 +76,7 @@ function startNew() {
         </button>
         <button class="wiped" title="删除存档并重新开始" @click="startNew">🗑</button>
       </div>
-      <div v-else-if="ui.touch" class="savenone">还没有存档 —— 点下面的「保存进度」立刻存一份</div>
+      <div v-else-if="ui.touch" class="savenone">还没有存档 —— 进入游戏后点右上「菜单」可随时保存</div>
       <div v-else class="savenone">还没有存档 —— 进入游戏后按 <kbd>F5</kbd> 保存，<kbd>F9</kbd> 读取</div>
 
       <!-- 手动存档：桌面端有 F5，触屏没有键盘，必须给一个按钮，

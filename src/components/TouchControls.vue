@@ -156,7 +156,7 @@ function place(on, e) { if (e) e.preventDefault(); engine.touchPlace(on) }
 .stick {
   position: fixed;
   left: calc(18px + env(safe-area-inset-left, 0px));
-  bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(100px + env(safe-area-inset-bottom, 0px));
   width: 118px;
   height: 118px;
   border-radius: 50%;
@@ -184,7 +184,7 @@ function place(on, e) { if (e) e.preventDefault(); engine.touchPlace(on) }
 .pad {
   position: fixed;
   right: calc(16px + env(safe-area-inset-right, 0px));
-  bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(100px + env(safe-area-inset-bottom, 0px));
   display: grid;
   grid-template-columns: 68px 68px;
   grid-template-rows: 68px 68px;
