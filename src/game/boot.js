@@ -109,7 +109,10 @@ export function boot() {
       ui.veilHint = `正在生成地形… ${Math.round(done / total * 100)}%`
       requestAnimationFrame(step)
     } else {
-      ui.veilHint = `${ready} · 点击后会锁定鼠标，按 <b>Esc</b> 可随时退出`
+      /* 触屏没有指针锁定，提示语不能提鼠标 —— 那句话在手机上完全是错的引导。 */
+      ui.veilHint = ui.touch
+        ? `${ready} · 左摇杆走路，滑动画面转视角`
+        : `${ready} · 点击后会锁定鼠标，按 <b>Esc</b> 可随时退出`
     }
   }
   step()

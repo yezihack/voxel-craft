@@ -3,6 +3,7 @@
  * 所有「用户点了界面上某个东西」要触发的逻辑都在这里导出，组件只管调用，
  * 不去碰引擎内部状态。原先散落在 onclick / addEventListener 里的代码全部收拢到此。 */
 import { audio, blip } from './audio.js'
+import { doBreak, doPlace } from './actions.js'
 import { armorAt, armorPoints, armorReduction, setArmorPiece } from './armor.js'
 import { despawnAllBots, despawnAllBotDrops } from './bots.js'
 import { despawnAllCarts } from './carts.js'
@@ -23,7 +24,7 @@ import { HOTBAR_N, activeSlots, cancelDig, invAdd, invCount, invTake, respawn } 
 import {
   MODE, SEED, bowCharge, breakHeld, dim, flatWorld, lookVec, mode, paused, placeHeld,
   placeRepeat, running, selected, setBowCharge, setBreakHeld, setColCache,
-  setColCacheSeed, setFlatWorld, setModeState, setPaused, setPlaceHeld,
+  setColCacheSeed, setFlatWorld, setLastAction, setModeState, setPaused, setPlaceHeld,
   setPlaceRepeat, setRunning, setSelected, setSpectate, setStructShapeCache,
   spectate, stickVec,
 } from './state.js'
@@ -131,7 +132,6 @@ export function setMode(m, announce = true) {
     despawnAllMobs()
     cancelDig()
   }
-  ui.flyTag = player.fly ? '(开)' : '(关)'
   if (announce) {
     toast(surv ? '⚔️ 生存模式：会饿、会摔伤、挖矿要花时间'
       : spec ? '👁 旁观模式：隐身穿墙观战 · 准星对准生物按 F 附身 · 再按 F 脱离'
@@ -187,6 +187,7 @@ export function startGame(wantLock = true) {
   if (ui.bagOpen) closeBag(true)
   setRunning(true)
   setPaused(false)
+  ui.started = true
   ui.veilVisible = false
   ui.deathVisible = false
   if (wantLock && canvas.requestPointerLock) canvas.requestPointerLock()
@@ -201,7 +202,9 @@ export function pauseGame() {
   cancelDig()
   if (ui.bagOpen) return              // 背包面板自己就是「暂停界面」，别叠加遮罩
   ui.veilVisible = true
-  ui.veilHint = '已暂停 — 点击继续，或按 <b>Esc</b> 关闭鼠标锁定'
+  ui.veilHint = ui.touch
+    ? '已暂停 — 点「开始游戏」继续'
+    : '已暂停 — 点击继续，或按 <b>Esc</b> 关闭鼠标锁定'
 }
 
 /* 面板需要真实鼠标指针，所以打开时必须退出指针锁定；关闭时再请求锁回来。
@@ -301,7 +304,6 @@ export function loadNow() {
   ui.survival = mode === MODE.SURVIVAL
   ui.worldFlat = flatWorld
   ui.selected = selected
-  ui.flyTag = player.fly ? '(开)' : '(关)'
   ui.deathVisible = false
   if (ui.bagOpen) closeBag(true)
   toast(`📂 已读档 · ${DIMS[dim].name} · ${countEdits()} 格改动`)
@@ -357,8 +359,44 @@ export function setLook(x, y) { lookVec.x = x; lookVec.y = y }
 export function toggleFly() {
   player.fly = !player.fly
   player.vy = 0
-  ui.flyTag = player.fly ? '(开)' : '(关)'
   blip(player.fly ? 880 : 440, 0.09, 'sine', 0.06)
+  toast(player.fly ? '✈ 飞行已开启' : '✈ 飞行已关闭')
+}
+
+/* 触屏「模式」按钮：和键盘 G 完全同一套循环（创造 ↔ 生存，旁观回创造）。
+ * 抽到这里是为了让键盘与按钮共用一个入口 —— 两边各写一遍迟早会跑偏。 */
+export function cycleMode() {
+  setMode(mode === MODE.SURVIVAL ? MODE.CREATIVE
+    : mode === MODE.CREATIVE ? MODE.SURVIVAL
+      : MODE.CREATIVE)
+}
+
+/* ---------------- 触屏「挖」与「放」 ----------------
+ * 触屏没有左右键，所以各给一个独立按钮。语义必须和鼠标逐条对齐，
+ * 否则同一个人换设备就会遇到「挖不动 / 放不下」：
+ *
+ *   挖：按住 = setBreakHeld(true)，松手 = 松开并 cancelDig。
+ *       生存模式不在这里直接破块 —— 必须走 updateDig 的硬度计时，
+ *       否则按住按钮会绕过挖掘时间；创造模式才瞬破。
+ *   放：按下立刻 doPlace() 给一次反馈；同时打开 placeRepeat，
+ *       按住不放由主循环按 0.22s 节流连发（铺路时不用一直点）。
+ *       手持弓时 placeHeld 会让主循环蓄力，手持盾牌时则进入格挡 ——
+ *       这两个复用都是「按住右键」的语义，按钮天然一致。 */
+export function touchMine(on) {
+  if (!on) { setBreakHeld(false); cancelDig(); return }
+  if (mode === MODE.SPECTATOR || !running) return
+  setBreakHeld(true)
+  setLastAction(performance.now() / 1000)
+  if (mode !== MODE.SURVIVAL) doBreak()
+}
+
+export function touchPlace(on) {
+  if (!on) { setPlaceHeld(false); setPlaceRepeat(false); return }
+  if (mode === MODE.SPECTATOR || !running) return
+  setPlaceHeld(true)
+  setPlaceRepeat(true)
+  doPlace()
+  setLastAction(performance.now() / 1000)
 }
 
 /* 键盘 Esc：开着背包就关背包，其余交给 pointerlockchange */

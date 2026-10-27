@@ -18,5 +18,10 @@ defineExpose({ canvasEl })
   display: block;
   width: 100%;
   height: 100%;
+  /* 触屏上必须禁掉浏览器手势：否则手指滑动会被当成滚动 / 下拉刷新 /
+   * 双指缩放，画面跟着页面一起动，视角反而转不动。 */
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 </style>

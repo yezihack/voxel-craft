@@ -20,7 +20,7 @@ import { canvas, gl, locLine, locMain, progLine, progMain } from './renderer.js'
 import { drawSky } from './sky.js'
 import { cancelDig, digProgress, heldId, invCount, invTake, updateDig, updateSurvival } from './survival.js'
 import { P } from './textures.js'
-import { syncHud, syncHurt, syncVitals } from './uiSync.js'
+import { syncHurt, syncVitals } from './uiSync.js'
 import { updateNameTags } from './nametags.js'
 import { ui } from './uiState.js'
 
@@ -28,7 +28,12 @@ import { ui } from './uiState.js'
 export let last = 0, fps = 0, fpsAcc = 0, fpsN = 0, frames = 0;
 
 export function resize() {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  /* 触屏把渲染倍率压到 1.5：手机的 devicePixelRatio 常见是 3，
+   * 按 2 倍算就是 2.2M 像素的 WebGL 画面，中端机会掉到 20 帧以下。
+   * 1.5 倍在这类屏幕上肉眼几乎看不出差别，帧率却能翻一倍 ——
+   * 「能不能玩」比「够不够锐」重要。 */
+  const cap = ui.touch ? 1.5 : 2;
+  const dpr = Math.min(window.devicePixelRatio || 1, cap);
   const w = Math.floor(innerWidth * dpr), h = Math.floor(innerHeight * dpr);
   if (canvas.width !== w || canvas.height !== h) {
     canvas.width = w; canvas.height = h;
@@ -248,7 +253,6 @@ export function frame(now) {
   gl.uniform1i(locMain.uAtlas, 0);
   gl.uniform3f(locMain.uTint, 1, 1, 1);
 
-  let drawn = 0, tris = 0;
   const vis = [];
   for (const c of chunks) {
     if (!c.built || !c.count) continue;
@@ -259,13 +263,13 @@ export function frame(now) {
   gl.disable(gl.BLEND);
   gl.depthMask(true);
   gl.uniform1f(locMain.uCutout, 1);
-  for (const c of vis) { drawChunkOpaque(c); drawn++; tris += c.opaCount / 3; }
+  for (const c of vis) drawChunkOpaque(c);
   // 半透明趟：开混合、关深度写入（否则先画的透明块会挡住后面的）
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.depthMask(false);
   gl.uniform1f(locMain.uCutout, 0);
-  for (const c of vis) { drawChunkBlend(c); tris += (c.count - c.opaCount) / 3; }
+  for (const c of vis) drawChunkBlend(c);
   gl.depthMask(true);
   gl.disable(gl.BLEND);
 
@@ -332,7 +336,6 @@ export function frame(now) {
 
   fpsAcc += dt; fpsN++;
   if (fpsAcc > 0.5) { fps = Math.round(fpsN / fpsAcc); fpsAcc = 0; fpsN = 0; }
-  if (frames % 12 === 0) syncHud(fps, drawn, chunks.length, tris);
 }
 
 /* 画一个线框立方体：用 model 矩阵方式在 CPU 端变换太慢，

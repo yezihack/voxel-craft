@@ -6,10 +6,6 @@
 import { reactive } from 'vue'
 
 export const ui = reactive({
-  /* ---- HUD ---- */
-  stat: '---',                 // 左上角状态行：维度 / FPS / 区块 / 坐标…
-  flyTag: '(关)',              // 帮助卡里「F 飞行」后面的状态
-
   /* ---- 准星 / 进度 ---- */
   crossHit: false,             // 准星指着方块 → 放大
   digOn: false, digPct: 0,     // 挖掘进度环
@@ -40,6 +36,7 @@ export const ui = reactive({
 
   /* ---- 弹层 ---- */
   veilVisible: true,           // 开始 / 暂停遮罩
+  started: false,              // 是否已经进过一次游戏（决定暂停面板是否给「保存」按钮）
   veilHint: '点击后会锁定鼠标，按 <b>Esc</b> 可以随时退出',
   deathVisible: false,
   deathMsg: '生命值归零',

@@ -29,38 +29,6 @@ body {
   color: var(--txt);
 }
 
-/* ---------- HUD 卡片（左上的状态卡、帮助卡共用） ---------- */
-.card {
-  background: var(--panel);
-  border: 1px solid var(--panel-brd);
-  border-radius: 12px;
-  padding: 9px 12px;
-  backdrop-filter: blur(10px);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
-}
-
-.card b {
-  color: var(--accent);
-  font-weight: 600
-}
-
-.card kbd {
-  display: inline-block;
-  min-width: 18px;
-  text-align: center;
-  background: rgba(255, 255, 255, .10);
-  border: 1px solid rgba(255, 255, 255, .18);
-  border-bottom-width: 2px;
-  border-radius: 5px;
-  padding: 0 5px;
-  font-size: 11px;
-  font-family: inherit;
-}
-
-.dim {
-  color: var(--dim)
-}
-
 /* ---------- 物品图标 ----------
  * 图标是 canvas 现画的等距立方体 / 平面物品图，放大时必须保持像素锐利。
  * 尺寸交给各容器用 --ic 变量指定，这样响应式断点只改一处。 */
@@ -75,6 +43,10 @@ body {
 /* ---------- 面板通用：开始 / 暂停 / 死亡三处共用同一张脸 ---------- */
 .panel {
   width: min(560px, 92vw);
+  /* 手机横屏时整块面板可能比视口还高，必须能滚 —— 否则「开始游戏」
+   * 会被挤到屏幕外面，人卡在开始界面出不来。 */
+  max-height: 92vh;
+  overflow-y: auto;
   border-radius: 22px;
   padding: 28px 30px;
   text-align: center;
@@ -127,4 +99,26 @@ body {
   margin-top: 14px;
   font-size: 11.5px;
   color: var(--dim)
+}
+
+/* 矮屏（手机横屏）：面板整体收一档，保证一屏能看完 */
+@media (max-height: 560px) {
+  .panel {
+    padding: 16px 18px;
+    border-radius: 16px;
+  }
+
+  .panel h1 {
+    font-size: 22px
+  }
+
+  .panel .tagline {
+    font-size: 11.5px;
+    margin-bottom: 12px
+  }
+
+  .go {
+    padding: 10px 26px;
+    font-size: 14px
+  }
 }

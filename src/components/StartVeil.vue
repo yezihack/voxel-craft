@@ -57,10 +57,16 @@ function startNew() {
           @click="engine.pickWorldType(w.flat)"
         >{{ w.label }}</button>
       </div>
-      <div class="keys">
+      <div v-if="ui.touch" class="keys">
+        <div><b>左摇杆</b> 走路</div>
+        <div><b>滑动画面</b> 转视角</div>
+        <div><b>挖 / 放</b> 右下两个大按钮</div>
+        <div><b>背包 / 模式 / 飞行</b> 右上三个按钮</div>
+      </div>
+      <div v-else class="keys">
         <div v-for="(k, i) in VEIL_KEYS" :key="i"><kbd>{{ k.key }}</kbd> {{ k.text }}</div>
       </div>
-      <button class="go" @click="engine.startGame(true)">开始游戏</button>
+      <button class="go" @click="tryStart">开始游戏</button>
 
       <!-- 存档区：有档就显示摘要 + 继续 / 删档，没档就提示快捷键 -->
       <div v-if="save" class="saverow">
@@ -70,7 +76,17 @@ function startNew() {
         </button>
         <button class="wiped" title="删除存档并重新开始" @click="startNew">🗑</button>
       </div>
+      <div v-else-if="ui.touch" class="savenone">还没有存档 —— 点下面的「保存进度」立刻存一份</div>
       <div v-else class="savenone">还没有存档 —— 进入游戏后按 <kbd>F5</kbd> 保存，<kbd>F9</kbd> 读取</div>
+
+      <!-- 手动存档：桌面端有 F5，触屏没有键盘，必须给一个按钮，
+       * 否则手机上只能等 60 秒一次的自动存档。 -->
+      <div v-if="ui.started" class="saverow">
+        <button class="savebtn" @click="engine.saveNow(true)">
+          💾 保存进度
+          <span class="savemeta">手动存一份，下次从这里继续</span>
+        </button>
+      </div>
 
       <div class="hint" @click.self="tryStart" v-html="ui.veilHint" />
     </div>
@@ -107,6 +123,11 @@ function startNew() {
   display: flex;
   gap: 8px;
   align-items: center;
+}
+
+.keys b {
+  color: var(--accent);
+  font-weight: 600
 }
 
 /* ---------- 模式选择器 ---------- */
@@ -237,6 +258,25 @@ function startNew() {
 @media (max-width: 820px) {
   .keys {
     grid-template-columns: 1fr
+  }
+}
+
+/* 矮屏（手机横屏）：按键表 / 说明再收一档，配合 .panel 的滚动保证一屏看得完 */
+@media (max-height: 560px) {
+  .keys {
+    gap: 4px 12px;
+    font-size: 11.5px;
+    margin-bottom: 12px;
+  }
+
+  .modes,
+  .worlds {
+    margin-bottom: 10px
+  }
+
+  .mode {
+    padding: 7px 14px;
+    font-size: 12px
   }
 }
 </style>

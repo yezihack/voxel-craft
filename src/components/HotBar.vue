@@ -41,8 +41,18 @@ function titleOf(s) {
 
 @media (max-height: 520px) {
   .hotbar {
-    bottom: 8px;
+    bottom: calc(8px + env(safe-area-inset-bottom, 0px));
     padding: 6px
+  }
+}
+
+/* 窄屏（竖屏手机）：9 格按 48px 排会顶出屏幕，把间距和留白一起收紧 */
+@media (max-width: 560px) {
+  .hotbar {
+    gap: 4px;
+    padding: 5px;
+    bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+    border-radius: 13px;
   }
 }
 </style>

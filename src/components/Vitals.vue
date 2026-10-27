@@ -119,4 +119,11 @@ svg {
     bottom: 72px
   }
 }
+
+/* 触屏：底部被 9 格快捷栏占着，生命条要再抬高一档才不会压在上面 */
+@media (pointer: coarse) {
+  .vitals {
+    bottom: 86px
+  }
+}
 </style>

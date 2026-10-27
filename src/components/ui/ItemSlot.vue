@@ -188,4 +188,27 @@ defineEmits(['pick'])
     display: none
   }
 }
+
+/* 竖屏手机（≤560px 宽）：9 格必须能排进一屏，名字和键位号都省掉，
+ * 只留图标 + 数量角标 —— 这两样才是选中方块时要看的。 */
+@media (max-width: 560px) {
+  .slot {
+    width: 36px;
+    height: 44px;
+    --ic: 22px;
+    border-width: 1.5px;
+    border-radius: 9px;
+  }
+
+  .slot .nm,
+  .slot .key {
+    display: none
+  }
+
+  .slot .cnt {
+    font-size: 9px;
+    right: 2px;
+    bottom: 1px;
+  }
+}
 </style>

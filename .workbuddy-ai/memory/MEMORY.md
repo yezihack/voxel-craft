@@ -33,6 +33,22 @@
   读档后必须清场（mobs/bots/掉落物/carts/arrows），`dead` 一律清掉。
 - 配方字符：26 个大写已被占满，新材料的字符只能用未占用的小写（d/t/u）。
 
+## 界面 / 触屏约定
+- 游戏内**不放常驻文字 HUD**（2026-10-27 按玩家要求整块删除 HudPanel / helpKeys）。
+  状态只准用图形表达（Vitals 的心形鸡腿气泡、准星、挖掘环、蓄力条）；
+  文字只走瞬时 `Toast`。加新 UI 时别在左上角再挂卡片。
+- 触屏手势分工是硬约定：**画布只负责转视角**（`input.js` 的 `touchmove` → `addLook`），
+  挖掘/放置走 `uiActions.touchMine` / `touchPlace` 两个专用按钮。
+  别再把「按住挖 / 长按放」塞回画布 —— 电容屏分不清停顿与长按。
+- `pointerdown` 必须跳过 `pointerType === 'touch'`，否则 pointer 与 touch 两套监听
+  会把同一次滑动各算一遍。
+- `touchPlace` 维护的是 `placeHeld` + `placeRepeat`，所以弓蓄力、盾牌格挡、
+  连发铺路全部自动复用；新增长按类功能时优先接这两个 flag，别再开新状态。
+- 触屏控件隐藏时必须复位按住状态（摇杆/挖掘/放置/跳/潜），
+  否则遮罩抢走焦点后 `touchend` 不来，人会自己一直往前走。
+- 触屏渲染倍率上限 1.5（桌面 2.0），见 `loop.js` 的 `resize()`。
+- 触屏没有键盘：存档/读档/暂停/换模式都要有按钮入口（暂停面板 + 右上系统按钮）。
+
 ## 无头测试（.scratch/<topic>/probe.mjs）踩坑
 - textures.js 顶部 `document.createElement('canvas')` 在 node 直跑会报
   `document is not defined`：probe 不要 import textures.js，改用迷你 BLOCKS 表

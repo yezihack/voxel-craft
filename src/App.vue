@@ -9,7 +9,6 @@ import DigRing from './components/DigRing.vue'
 import FatalNotice from './components/FatalNotice.vue'
 import GameCanvas from './components/GameCanvas.vue'
 import HotBar from './components/HotBar.vue'
-import HudPanel from './components/HudPanel.vue'
 import HurtFlash from './components/HurtFlash.vue'
 import IconDefs from './components/IconDefs.vue'
 import NameTags from './components/NameTags.vue'
@@ -20,8 +19,15 @@ import Vitals from './components/Vitals.vue'
 
 /* 触屏判定。原 HTML 在输入段里做这件事并给 body 挂 .touch；
  * 这里只记一个 ui.touch —— 触屏控件的显隐、开始遮罩的点击行为都读它，
- * 不再需要 body 上的类名（同理 body.survival 也换成了 ui.survival）。 */
-ui.touch = 'ontouchstart' in window && matchMedia('(pointer:coarse)').matches
+ * 不再需要 body 上的类名（同理 body.survival 也换成了 ui.survival）。
+ *
+ * 判据是「粗指针 + 真的有触摸点」：只看 ontouchstart 会把带触摸屏的
+ * Windows 笔记本也判成手机，那类设备有鼠标，冒出一套摇杆反而碍事。 */
+const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches
+ui.touch = coarse && (navigator.maxTouchPoints > 0 || 'ontouchstart' in window)
+/* 首屏提示语要在引擎拉起之前就对上设备 —— boot() 会覆盖它，
+ * 但地形生成要几秒，那段时间显示的仍是这里的默认值。 */
+if (ui.touch) ui.veilHint = '触屏操作：左摇杆走路，滑动画面转视角'
 
 const game = ref(null)
 
@@ -48,7 +54,6 @@ onMounted(async () => {
   <BowBar />
   <HurtFlash />
   <NameTags />
-  <HudPanel />
   <Vitals />
   <HotBar />
   <BagPanel />

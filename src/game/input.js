@@ -8,10 +8,10 @@ import { camEye } from './loop.js'
 import { clamp } from './math.js'
 import { MOB_TYPES, raycastMob } from './mobs.js'
 import { player } from './player.js'
-import { closeBag, loadNow, saveNow, selectSlot, setMode, toggleBag } from './uiActions.js'
+import { closeBag, cycleMode, loadNow, saveNow, selectSlot, toggleBag } from './uiActions.js'
 import { toast, ui } from './uiState.js'
 import { canvas } from './renderer.js'
-import { HOTBAR_N, cancelDig, respawn } from './survival.js'
+import { HOTBAR_N, respawn } from './survival.js'
 
 /* ============================== 输入 ============================== */
 export const input = { f: false, b: false, l: false, r: false, jump: false, shift: false, sprint: false };
@@ -65,15 +65,13 @@ window.addEventListener('keydown', (e) => {
     else {
       player.fly = !player.fly;
       player.vy = 0;
-      ui.flyTag = player.fly ? '(开)' : '(关)';
       blip(player.fly ? 880 : 440, 0.09, 'sine', 0.06);
+      toast(player.fly ? '✈ 飞行已开启（F 关闭）' : '✈ 飞行已关闭');
     }
   }
   /* G 三模式循环：创造 → 生存 → 旁观 → 创造。
    * 为什么不是「切回上一个」：三个模式两两组合都有意义，而循环只需要一次按键。 */
-  if (k === 'KeyG') setMode(mode === MODE.SURVIVAL ? MODE.CREATIVE
-                                  : mode === MODE.CREATIVE ? MODE.SURVIVAL
-                                  : MODE.CREATIVE);
+  if (k === 'KeyG') cycleMode();
   if (k === 'KeyE' && running) { e.preventDefault(); toggleBag(); }
   if (k === 'KeyR') {
     if (mode === MODE.SURVIVAL) { respawn(); toast('已回到出生点'); }
@@ -124,6 +122,9 @@ export function endDrag() { dragging = false; dragPointerId = null; }
 
 canvas.addEventListener('pointerdown', (e) => {
   if (!running) return;
+  /* 触摸指针不参与拖拽：触屏的视角转动由下面的 touchmove 专门处理。
+   * 两套都生效的话，一次滑动会被乘上两倍灵敏度，还会互相抢 pointerId。 */
+  if (e.pointerType === 'touch') return;
   const locked = document.pointerLockElement === canvas;
   // 未锁定：左键/触摸都能拖；已锁定：用右键拖（左键留给挖掘）
   if (!locked) { startDrag(e); return; }
@@ -166,21 +167,34 @@ window.addEventListener('mouseup', (e) => {
 });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
-/* 触屏：按住 = 挖掘（生存模式按进度累计），长按 380ms = 放置。
- * 这两个监听挂在画布上 —— 手指落在世界里的动作，和覆盖层的触屏控件不是一回事。 */
-let tapTimer = null;
+/* 触屏：在画布上滑动 = 转视角。
+ * 挖掘与放置交给右下角的两个专用按钮（TouchControls.vue → touchMine / touchPlace）。
+ *
+ * 早期版本把「按住挖、长按 380ms 放」压在画布上，结果是「想转头却挖了个坑」——
+ * 拖拽和长按在电容屏上本来就分不清，手指稍微停顿一下就会从「转视角」跳成「挖掘」，
+ * 再停久一点又变成「放置」。把三个动作挤在同一个手势里必然互相误伤，
+ * 所以画布只保留最不会误判的那一个：滑动转向。 */
+export const TOUCH_LOOK = 2.2;      // 触屏灵敏度倍率：手指位移比鼠标粗，放大才跟手
+let lookId = null, lookX = 0, lookY = 0;
+
 canvas.addEventListener('touchstart', (e) => {
-  if (mode === MODE.SPECTATOR) return;    // 旁观不挖不放
-  setBreakHeld(true);                      // 按住期间持续挖，松手即停
-  setLastAction(performance.now() / 1000);
-  if (mode !== MODE.SURVIVAL) doBreak(); // 创造模式瞬破，立即给反馈
-  tapTimer = setTimeout(() => {
-    setBreakHeld(false);                   // 转入放置，不再挖
-    setPlaceHeld(true); setPlaceRepeat(true); doPlace();
-    setLastAction(performance.now() / 1000);
-  }, 380);
+  if (!running || lookId !== null) return;
+  const t = e.changedTouches[0];
+  lookId = t.identifier;
+  lookX = t.clientX; lookY = t.clientY;
 }, { passive: true });
-canvas.addEventListener('touchend', () => {
-  clearTimeout(tapTimer);
-  setBreakHeld(false); setPlaceHeld(false); setPlaceRepeat(false); cancelDig();
-});
+
+canvas.addEventListener('touchmove', (e) => {
+  for (const t of e.changedTouches) {
+    if (t.identifier !== lookId) continue;
+    addLook((t.clientX - lookX) * TOUCH_LOOK, (t.clientY - lookY) * TOUCH_LOOK);
+    lookX = t.clientX; lookY = t.clientY;
+    e.preventDefault();            // 阻止页面跟着手指滚动 / 下拉刷新
+  }
+}, { passive: false });
+
+const endLook = (e) => {
+  for (const t of e.changedTouches) if (t.identifier === lookId) lookId = null;
+};
+canvas.addEventListener('touchend', endLook);
+canvas.addEventListener('touchcancel', endLook);

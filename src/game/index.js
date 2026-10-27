@@ -17,11 +17,11 @@ export { setTagHook, ui } from './uiState.js'
 
 /* 界面动作 */
 export {
-  clearCraftAll, clearCraftSlot, clickInvSlot, closeBag, equipArmorItem,
-  loadNow, newWorld, pickLibraryItem, pickMode, pickRecipe, pickWorldType,
+  clearCraftAll, clearCraftSlot, clickInvSlot, closeBag, cycleMode, equipArmorItem,
+  loadNow, newWorld, pauseGame, pickLibraryItem, pickMode, pickRecipe, pickWorldType,
   respawnAndStart, saveNow, saveStatus, selectSlot, setInputKey, setLook,
-  setStick, startGame, takeCraftResult, toggleBagExpand, toggleFly,
-  unequipArmorSlot,
+  setStick, startGame, takeCraftResult, toggleBag, toggleBagExpand, toggleFly,
+  touchMine, touchPlace, unequipArmorSlot,
 } from './uiActions.js'
 
 /* 派生数据 */
