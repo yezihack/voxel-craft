@@ -49,7 +49,7 @@
   连发铺路全部自动复用；新增长按类功能时优先接这两个 flag，别再开新状态。
 - 触屏控件隐藏时必须复位按住状态（摇杆/挖掘/放置/跳/潜），
   否则遮罩抢走焦点后 `touchend` 不来，人会自己一直往前走。
-- 摇杆 → 方向键的换算在 **`stick.js`**（`applyStickInput` / `releaseStick`），
+- 摇杆 → 方向键的换算在 **`stick.js`**（`applyStickInput`），
   靠 `stickInput.active` 的「接管期」保证**归零那一帧也写 false**。
   别在 loop 里再写 `if (stickVec.x || stickVec.y)` —— 那样松手后向量归零、
   分支被跳过，上一帧的 `input.f = true` 没人清，人会一直往前走。
@@ -57,6 +57,24 @@
   第一帧就可点，不铺占位会抛 `engine.xxx is not a function`。
 - 触屏渲染倍率上限 1.5（桌面 2.0），见 `loop.js` 的 `resize()`。
 - 触屏没有键盘：存档/读档/暂停/换模式都要有按钮入口（暂停面板 + 右上系统按钮）。
+- 手机闪退三堵（2026-10-28）：触屏判定放宽到 `coarse || innerWidth <= 900`
+  （有的安卓 WebView 报 fine）；`pointerlockerror` 在 `ui.touch` 下直接 return；
+  `webglcontextlost` → 存档 + reload，`visibilitychange` 切后台 → 存档 + 暂停，
+  `window.onerror` / `unhandledrejection` → `FatalNotice` 亮出真实错误。别删这几处。
+
+## AI 玩家（bots.js）与 mobs 的边界
+- bots.js 已 import mobs.js，**反向 import 必成环**：mobs 侧只留
+  `export const botHook = { list, damage }`，由 bots 的幂等 `installBotHook()`
+  注入（`boot()` + `spawnBot()` 各调一次）。
+- **别在 bots.js 顶层调 `registerBots`**：mobs.js 的 `const botHook` 还没初始化，
+  必撞 «Cannot access 'botHook' before initialization»（TDZ）。
+- bot 的回血有多路（eat / home / 定时），`damageBot` 一律置 `b.regenBlockT = 6`，
+  **所有回血分支都要判 `regenBlockT <= 0`** —— 否则回血快过僵尸 3/s 的输出，
+  表现就是「挨打血条不动」。
+
+## 交互距离
+- `REACH = 13`（挖/放/上车/召唤/点燃）与 `REACH_ATTACK = 9`（打怪/打 bot/旁观射线）
+  **必须分开**。攻击也吃 13 会变成隔空点杀。
 
 ## 无头测试（.scratch/<topic>/probe.mjs）踩坑
 - textures.js 顶部 `document.createElement('canvas')` 在 node 直跑会报
