@@ -2,6 +2,10 @@
  * 原文件里这一段的 DOM 部分（veil / death / btnStart / 模式按钮的事件绑定）
  * 全部搬到了 Vue 组件与 uiActions.js，这里只留引擎侧的真活儿。 */
 import { blip } from './audio.js'
+/* installBotHook 必须在这里显式调一次：AI 玩家要在「还没生成任何 bot」时
+ * 就已经登记给生物模块，否则僵尸的第一帧感知里根本不存在这群人。
+ * 不能写成 bots.js 的顶层副作用 —— 那会撞上 mobs.js 的 TDZ（见 bots.js 末尾）。 */
+import { installBotHook } from './bots.js'
 import { CD, CW, D, I, W } from './config.js'
 import { findSpawn, generate } from './fluid.js'
 import { getEffective } from './generate.js'
@@ -14,10 +18,10 @@ import { dimSpawn } from './portal.js'
 import { updateSkyColor, uploadAtlas, uploadBotMesh, uploadCartMesh, uploadChunk, uploadDropMesh, uploadMobMeshes } from './post.js'
 import { canvas } from './renderer.js'
 import { buildCloudTexture } from './sky.js'
-import { breakHeld, running, setBowCharge, setBreakHeld, setOnDeath, setOnHurt, setPaused, setPlaceHeld, setPlaceRepeat, setRunning } from './state.js'
+import { breakHeld, paused, running, setBowCharge, setBreakHeld, setOnDeath, setOnHurt, setPaused, setPlaceHeld, setPlaceRepeat, setRunning } from './state.js'
 import { cancelDig } from './survival.js'
 import { buildAtlas } from './textures.js'
-import { pauseGame, showDeath } from './uiActions.js'
+import { pauseGame, saveNow, showDeath } from './uiActions.js'
 import { ui } from './uiState.js'
 
 /* ---------------- 系统级事件：指针锁定 ----------------
@@ -35,10 +39,38 @@ export function attachSystemEvents() {
   })
   /* 关掉背包会立刻重新请求指针锁定，而浏览器对「刚解锁就重锁」有冷却，
    * 被拒后就没人管了 —— 鼠标锁不上、又没有遮罩，玩家会以为游戏卡住。
-   * 这里退化成暂停遮罩，点一下即可继续。 */
+   * 这里退化成暂停遮罩，点一下即可继续。
+   *
+   * ⚠ 触屏环境必须直接放过：手机/平板上 requestPointerLock 要么不存在、
+   * 要么立刻失败，而 pointerlockerror 一触发就 pauseGame() ——
+   * 表现正是「点开始游戏，画面闪一下就退回开始面板」，玩家会当成闪退。
+   * 触屏本来就不锁鼠标（startGame 传的是 !ui.touch），这条错误对它没有意义。 */
   document.addEventListener('pointerlockerror', () => {
+    if (ui.touch) return
     if (!ui.bagOpen) pauseGame()
   })
+  /* 切到后台就暂停。
+   * 手机上「闪退」最常见的真相是：切走时浏览器回收了 WebGL 上下文，
+   * 回来时画面一片黑，看着像崩了。先在切走那一刻暂停 + 存档，
+   * 回来时至少有暂停面板可点，进度也不会丢。 */
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) return
+    if (running && !paused) {
+      try { saveNow(false) } catch (e) { /* 隐私模式 / 配额满，忽略 */ }
+      pauseGame()
+    }
+  })
+  /* WebGL 上下文丢失（iOS Safari 内存紧张时的常客）。
+   * renderer.js 的 program / 贴图都是模块顶层的 const，丢了就没法原地重建，
+   * 所以这里只做两件事：先存一份档，再重载页面 ——
+   * 比让玩家对着黑屏自己刷新要好，至少进度还在。 */
+  canvas.addEventListener('webglcontextlost', (e) => {
+    e.preventDefault();                    // 告诉浏览器「我想恢复」
+    try { saveNow(false) } catch (err) { /* 忽略 */ }
+    ui.veilHint = '画面上下文丢失（多半是手机内存紧张），正在重新载入…';
+    ui.veilVisible = true;
+    setTimeout(() => { try { location.reload(); } catch (err) { /* 忽略 */ } }, 900);
+  }, false)
 }
 
 /* 把生存逻辑的事件钩子接到界面上（生存逻辑本身不知道界面的存在） */
@@ -60,6 +92,7 @@ export function attachSurvivalHooks() {
 
 export function boot() {
   const t0 = performance.now()
+  installBotHook()      // 把 AI 玩家登记给生物模块（僵尸才会把他们当猎物）
   const info = generate(20260918)
   player.spawn = findSpawn()
   dimSpawn[0] = player.spawn              // 主世界的出生点登记进维度表（R 键 / 死亡重生用）

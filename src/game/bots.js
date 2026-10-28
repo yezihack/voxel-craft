@@ -3,11 +3,11 @@
 import { MODE, mode, setHandSwing, setSwingT, swingT } from './state.js'
 import { spawnParticles } from './actions.js'
 import { blip } from './audio.js'
-import { BLOCKS, D, EYE, G, H, I, REACH, attackDamage, breakTime, dropCountOf, dropOf, isBlockId } from './config.js'
+import { BLOCKS, D, EYE, G, H, I, REACH_ATTACK, attackDamage, breakTime, dropCountOf, dropOf, isBlockId } from './config.js'
 import { getEffective, isLiquid, isSolid, setBlock } from './generate.js'
 import { RECIPES, recipeMatrix } from './crafting.js'
 import { keys } from './input.js'
-import { MOB_TYPES, damageMob, isNight, mobs, rayBox, raycastMob } from './mobs.js'
+import { MOB_TYPES, damageMob, isNight, mobs, rayBox, raycastMob, registerBots } from './mobs.js'
 import { moveBodyAxis, player } from './player.js'
 import { portalIdInBox } from './portal.js'
 import { hurt, invAdd } from './survival.js'
@@ -105,6 +105,7 @@ export function botGroundY(x, z, yRef) {
 
 /* 造一个人。name 缺省时从名字池里随机取一个（避让已在场的人）。 */
 export function spawnBot(x, y, z, name) {
+  installBotHook();                              // 幂等；见文件末尾的说明
   if (bots.length >= BOT_CAP) return null;
   const taken = new Set(bots.map(b => b.name));
   let nm = name;
@@ -120,6 +121,11 @@ export function spawnBot(x, y, z, name) {
     onGround: false, inWater: false,
     hp: 20, maxHp: 20, food: 20,
     hurtFlash: 0, dead: false, animT: botRng() * 6,
+    /* 受伤后的「禁疗时间」。之前它们身上挂着三路回血（吃东西 5/s、
+     * 到家 2.5/s、每 3.5 秒 +1），而僵尸一秒才打 3 点 —— 回血比掉血快，
+     * 打半天血条纹丝不动，看起来就像「AI 玩家根本不会受伤」。
+     * 现在挨一下之后 6 秒内一滴血都回不了，伤害才留得住。 */
+    regenBlockT: 0,
     /* 配色：skin/shirt/pants/hair 四套，eye 固定黑白不吃 tint */
     col: {
       skin:  BOT_SKINS[Math.floor(botRng() * BOT_SKINS.length) % BOT_SKINS.length],
@@ -179,6 +185,9 @@ export function damageBot(b, n, kx, kz, fromPlayer) {
   if (b.dead || n <= 0) return 0;
   b.hp = Math.max(0, b.hp - n);
   b.hurtFlash = 0.35;
+  /* 挨打之后禁疗 6 秒 —— 否则「吃东西回 5/s」比僵尸的 3/s 还快，
+   * 血条永远不动，玩家会以为 AI 玩家是无敌的。 */
+  b.regenBlockT = 6;
   if (fromPlayer) {
     b.angryT = 14;                             // 记你一笔，追你 14 秒
     b.speak = 1.4; b.speakMsg = '喂！';
@@ -688,7 +697,10 @@ export function botFleeTo(b, tx, tz, speed, dt) {
 export function botGoHome(b, dt) {
   const d = Math.hypot(b.home[0] - b.x, b.home[2] - b.z);
   if (d < 1.4) {
-    if (b.hp < b.maxHp) { healBot(b, 2.5 * dt); }
+    /* 到家才回血，而且受伤后 6 秒内不回 —— 见 damageBot 的说明。
+     * 速度也从 2.5/s 降到 1.2/s：一路 2.5/s 等于「跑回家就满血」，
+     * 追着打的怪再怎么努力也留不下痕迹。 */
+    if (b.hp < b.maxHp && b.regenBlockT <= 0) { healBot(b, 1.2 * dt); }
     b.state = 'idle'; b.goal = null;
     b.yaw += 0.004;
     return;
@@ -700,7 +712,7 @@ export function botGoHome(b, dt) {
 export function botEat(b, dt) {
   if (b.hp >= b.maxHp || b.food <= 6) { b.state = 'idle'; return; }
   b.food -= 8 * dt;
-  healBot(b, 5 * dt);
+  if (b.regenBlockT <= 0) healBot(b, 2.5 * dt);
   b.stateT += dt;
   if (b.stateT > 1.4) { b.state = 'idle'; b.speakMsg = '嗯，好多了。'; }
 }
@@ -737,9 +749,15 @@ export function botStep(b, dt) {
       if (botRng() < 0.012) botWalkTo(b, b.x + (botRng() - 0.5) * 12, b.z + (botRng() - 0.5) * 12, 1.4, dt);
   }
 
-  /* 血少就慢慢回一点（别让它们永远残血站桩） */
+  /* 血少就慢慢回一点（别让它们永远残血站桩）。
+   * 受伤后 6 秒内禁疗，间隔也从 3.5 秒放宽到 6 秒 —— 原来这一路单独看很温和，
+   * 但它和「吃东西 5/s」「到家 2.5/s」叠在一起就成了不死之身。 */
+  b.regenBlockT = Math.max(0, (b.regenBlockT || 0) - dt);
   b.healT += dt;
-  if (b.healT > 3.5) { b.healT = 0; if (b.hp < b.maxHp) healBot(b, 1); }
+  if (b.healT > 6) {
+    b.healT = 0;
+    if (b.hp < b.maxHp && b.regenBlockT <= 0) healBot(b, 1);
+  }
   /* 头上冒话 */
   b.speakCd -= dt;
   if (b.speak > 0) b.speak -= dt;
@@ -874,8 +892,9 @@ export function tryAttackAny(dt, blockDist = Infinity) {
 
   /* 比距离：谁更近打谁。AI 玩家和怪在同一个准星方向上时，
    * 该打哪个不该由数组顺序决定（谁先被遍历到谁挨打，纯属偶然）。 */
-  const hB = raycastBot(p.x, eye, p.z, dir[0], dir[1], dir[2], REACH);
-  const hM = raycastMob(p.x, eye, p.z, dir[0], dir[1], dir[2], REACH);
+  /* 打人/打怪用 REACH_ATTACK —— REACH 已经是 13 格的挖放距离 */
+  const hB = raycastBot(p.x, eye, p.z, dir[0], dir[1], dir[2], REACH_ATTACK);
+  const hM = raycastMob(p.x, eye, p.z, dir[0], dir[1], dir[2], REACH_ATTACK);
   const dB = hB && hB.dist < blockDist ? hB.dist : Infinity;
   const dM = hM && hM.dist < blockDist ? hM.dist : Infinity;
   if (dB === Infinity && dM === Infinity) return false;
@@ -1003,3 +1022,23 @@ export function updateBotDrops(dt) {
 }
 
 export function despawnAllBotDrops() { botDrops.length = 0; }
+
+/* ---------------- 把 AI 玩家交给生物模块 ----------------
+ * mobs.js 不能反向 import 本文件（bots.js 已经 import 了 mobs.js，成环会让
+ * ESM 拿到未初始化的绑定）。所以由这边把「列表」和「扣血函数」递过去 ——
+ * 之后僵尸、骷髅的箭、苦力怕爆炸、凋灵的爆破才会把 AI 玩家当成和玩家一样的猎物。
+ *
+ * ⚠ 必须**延迟**到模块图跑完之后再注册：直接写在模块顶层会撞上 TDZ ——
+ * mobs.js 自己的 import 链里绕回来加载了 bots.js，那一刻 mobs.js 的
+ * `export const botHook` 还没初始化，registerBots 会抛
+ * 「Cannot access 'botHook' before initialization」。所以由 boot() 调用一次，
+ * spawnBot 里也兜一次（幂等），保证任何时候生成第一只 bot 之前都装好了。
+ *
+ * 传的是数组**引用**（bots 是 const 数组、只 push/splice 不重新赋值），
+ * 所以增删 bot 不需要重新注册。 */
+let hookInstalled = false;
+export function installBotHook() {
+  if (hookInstalled) return;
+  hookInstalled = true;
+  registerBots(bots, damageBot);
+}

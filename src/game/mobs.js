@@ -3,7 +3,7 @@
 import { MODE, dim, mode, setHandSwing, setSwingT, spectate, swingT } from './state.js'
 import { spawnParticles } from './actions.js'
 import { blip, noiseBurst } from './audio.js'
-import { BLOCKS, D, EGG_OF, EYE, G, H, I, ITEMS, JUMP_V, MAT_PLAIN, PW, REACH, SUMMON_OF, TILE_INDEX, UV_QUAD, attackDamage, setMobTypes, tileUV } from './config.js'
+import { BLOCKS, D, EGG_OF, EYE, G, H, I, ITEMS, JUMP_V, MAT_PLAIN, PW, REACH_ATTACK, SUMMON_OF, TILE_INDEX, UV_QUAD, attackDamage, setMobTypes, tileUV } from './config.js'
 import { CELL, DIMS, structAnchor, structAt } from './dims.js'
 import { getEffective, isLiquid, isSolid, setBlock } from './generate.js'
 import { keys } from './input.js'
@@ -341,7 +341,28 @@ if (Object.keys(EGG_OF).length !== EGG_MOBS.length)
   throw new Error('刷怪蛋数量(' + Object.keys(EGG_OF).length + ') 与生物种类(' + EGG_MOBS.length + ') 对不上');
 
 export const mobs = [];
-export const MOB_CAP = 26;                    // 同屏上限，防止刷爆
+/* 同屏上限。26 → 38 → 64（按玩家要求再放宽）。
+ * 夜里 + 村庄 + 刷怪蛋同时拉满时，38 太容易撞顶：想再放一只 boss 会被
+ * 「场上生物太多了」挡回去。64 只的 AI 与物理都只是一次简单函数调用，
+ * 桌面端毫无压力；手机端会明显掉帧，但这是玩家明确要的取舍。
+ * 刷怪间隔也跟着从 1.4s 缩到 1.0s —— 只放宽上限不改速率的话，
+ * 从 38 涨到 64 要多等 40 秒，看起来就像「上限根本没变」。 */
+export const MOB_CAP = 64;
+
+/* ---------------- AI 玩家（bots）的接入点 ----------------
+ * 为什么用注入而不是 import：bots.js 已经 `import ... from './mobs.js'`，
+ * 这里反向再 import 就成环 —— ESM 下拿到的是还没初始化的绑定，
+ * 一路平安到 mobAI 真正跑起来才炸（那时候堆栈已经跟根因无关了）。
+ * 所以由 bots.js 在模块加载完成后把自己的列表和扣血函数递进来。
+ *
+ * 注入之前（纯无头测试、或者 bots 模块没被加载）botHook.list 是 null，
+ * 所有 bot 相关分支整段跳过 —— 行为与「世界里没有 AI 玩家」逐字等价。 */
+export const botHook = { list: null, damage: null };
+export function registerBots(list, damage) {
+  botHook.list = list;
+  botHook.damage = damage;
+}
+
 export let mobRng = Math.random;              // 测试可替换成确定性随机
 export let mobSpawnT = 2;
 export let villageSpawnN = 0;                 // 村庄刷点计数（每第 4 个刷傀儡）
@@ -557,16 +578,35 @@ export function nearestThreat(m, range, pred) {
 export const isHostileType = (D) => !!D.hostile;
 export const isGuardType   = (D) => !!D.guard;
 
-/* 僵尸的目标：玩家与附近的傀儡里取更近的一个。
- * ⚠ 场上没有傀儡、玩家也活着时，返回值必须与旧实现**逐字等价** ——
+/* 最近的 AI 玩家。高差判据与 nearestThreat 对齐：怪物爬不上 10 格，
+ * 追一个站在屋顶上的 bot 只会原地打转。botHook 没注入时返回 null。 */
+export function nearestBot(m, range) {
+  const list = botHook.list;
+  if (!list) return null;
+  let best = null, bd = range;
+  for (const b of list) {
+    if (b.dead) continue;
+    if (Math.abs(b.y - m.y) > 10) continue;
+    const d = Math.hypot(b.x - m.x, b.z - m.z);
+    if (d < bd) { bd = d; best = b; }
+  }
+  return best;
+}
+
+/* 僵尸的目标：玩家 / 傀儡 / AI 玩家里取最近的一个。
+ * ⚠ 场上没有傀儡、也没有 bot、玩家也活着时，返回值必须与旧实现**逐字等价** ——
  * 旧的一批断言全都只放玩家，不能被这次泛化带偏。
  * 旁观模式同理：玩家「不存在」于怪物的感知里（bd = Infinity），
- * 于是怪物只会去揍傀儡 —— 旁观时看傀儡大战僵尸才是正经事。 */
+ * 于是怪物只会去揍傀儡和 AI 玩家 —— 旁观时看傀儡大战僵尸才是正经事。 */
 export function hostileTarget(m, sight) {
   let best = player, bd = Math.hypot(player.x - m.x, player.z - m.z), kind = 'player';
   if (player.dead || mode === MODE.SPECTATOR) bd = Infinity;    // 死了就不再被追
   const g = nearestThreat(m, Math.min(sight, bd), isGuardType);
   if (g) { best = g; bd = Math.hypot(g.x - m.x, g.z - m.z); kind = 'guard'; }
+  /* AI 玩家也是猎物。少了这一条，僵尸只会追真人 —— 旁边的 bot 站着挨打不掉血，
+   * 整场仗看起来像在打空气。 */
+  const b = nearestBot(m, Math.min(sight, bd));
+  if (b) { best = b; bd = Math.hypot(b.x - m.x, b.z - m.z); kind = 'bot'; }
   if (bd > sight || Math.abs(best.y - m.y) > 12) return null;
   return { obj: best, kind, dist: bd, dy: best.y - m.y };
 }
@@ -709,14 +749,17 @@ export function mobAI(m, dt) {
         shootArrowAt(m, D.ranged, T.obj);
       }
 
-      /* 凋灵周期爆破：在目标脚下炸一个球，破坏方块 + 伤人。
-       * 复用 explodeMob 的「球形破坏 + 衰减伤害」逻辑，只是中心换到玩家位置。
+      /* 凋灵周期爆破：在**当前目标**脚下炸一个球，破坏方块 + 伤人。
+       * 中心取 T.obj 而不是玩家 —— boss 锁的是谁就在谁脚下炸，
+       * 否则它会一边追着 AI 玩家跑、一边在远处的玩家脚下放炮。
+       * 复用 explodeMob 的「球形破坏 + 衰减伤害」逻辑，只是中心换掉。
        * 不能直接调 explodeMob(m) —— 那会让 m.dead = true，凋灵一炸就自杀了。
        * 这里只借它的方块破坏部分，伤害单独算。 */
       if (D.witherBomb && m.bombT <= 0) {
         m.bombT = D.witherBomb.cd;
         const R = D.witherBomb.radius;
-        const cx = player.x, cy = player.y + 0.6, cz = player.z;
+        const tgt = T.obj;
+        const cx = tgt.x, cy = tgt.y + 0.6, cz = tgt.z;
         const r2 = R * R;
         for (let y = Math.max(1, Math.floor(cy - R)); y <= Math.ceil(cy + R); y++)
           for (let z = Math.floor(cz - R); z <= Math.ceil(cz + R); z++)
@@ -729,8 +772,21 @@ export function mobAI(m, dt) {
               if (B && B.hard >= 6) continue;
               if (typeof setBlock === 'function') setBlock(x, y, z, 0);
             }
-        const pd = Math.hypot(player.x - cx, player.y - cy, player.z - cz);
-        if (pd < R) hurt(D.witherBomb.dmg * (1 - pd / R), '你被凋灵的爆破击中了');
+        /* 伤害按距离衰减。目标是谁就结算到谁头上：真人走 hurt（护甲/盾牌
+         * 减免在里面），AI 玩家走 botHook.damage。
+         * 只结算「被锁定的那个目标」—— 不顺手炸一圈傀儡和小怪，
+         * 那会改变既有的 boss 平衡（凋灵把自己召的援军炸光）。 */
+        const bdmg = (d) => Math.max(1, Math.round(D.witherBomb.dmg * (1 - d / R)));
+        if (T.kind === 'bot') {
+          const bd = Math.hypot(T.obj.x - cx, T.obj.y + 0.9 - cy, T.obj.z - cz);
+          if (bd < R) botHook.damage(T.obj, bdmg(bd), (T.obj.x - cx) / (bd || 1), (T.obj.z - cz) / (bd || 1));
+        } else if (T.kind === 'guard') {
+          const gd = Math.hypot(T.obj.x - cx, T.obj.y + 0.5 - cy, T.obj.z - cz);
+          if (gd < R) damageMob(T.obj, bdmg(gd), (T.obj.x - cx) / (gd || 1), (T.obj.z - cz) / (gd || 1));
+        } else {
+          const pd = Math.hypot(player.x - cx, player.y - cy, player.z - cz);
+          if (pd < R) hurt(bdmg(pd), '你被凋灵的爆破击中了');
+        }
         if (typeof noiseBurst === 'function') noiseBurst(0.6, 0.20, 160);
       }
 
@@ -839,6 +895,10 @@ export function mobAI(m, dt) {
             damageMob(T.obj, D.dmg, nx, nz);
             T.obj.vx += nx * k; T.obj.vz += nz * k;
             T.obj.vy = Math.max(T.obj.vy, 3.4);
+          } else if (T.kind === 'bot') {
+            /* AI 玩家走 damageBot —— 它自己处理击退与死亡掉落。
+             * 千万不能复用 hurt()：那是玩家专用入口，会把伤害记到真人头上。 */
+            botHook.damage(T.obj, D.dmg, nx, nz);
           } else {
             hurt(D.dmg, '你被' + D.name + '打死了');
             player.vx += nx * k;
@@ -970,7 +1030,7 @@ export function dimMobSpawn() {
 export function updateMobSpawn(dt) {
   mobSpawnT -= dt;
   if (mobSpawnT > 0) return;
-  mobSpawnT = 1.4;
+  mobSpawnT = 1.0;
   if (mobs.length >= MOB_CAP || player.dead) return;
   /* 异界从入口就分道扬镳，绝不落进下面主世界那条总闸（理由见 dimMobSpawn） */
   if (dim !== 0) { dimMobSpawn(); return; }
@@ -1198,7 +1258,9 @@ export function tryAttackMob(dt, blockDist = Infinity) {
   const cp = Math.cos(p.pitch), sp = Math.sin(p.pitch);
   const dir = [-Math.sin(p.yaw) * cp, sp, -Math.cos(p.yaw) * cp];
   const eye = p.y + EYE;
-  const hit = raycastMob(p.x, eye, p.z, dir[0], dir[1], dir[2], REACH);
+  /* 攻击用 REACH_ATTACK，不用 REACH：REACH 现在是 13 格（挖/放用的），
+   * 拿它打怪会变成隔空点杀。 */
+  const hit = raycastMob(p.x, eye, p.z, dir[0], dir[1], dir[2], REACH_ATTACK);
   if (!hit || hit.dist >= blockDist) return false;
   setSwingT(0.32);
   setHandSwing(1);
@@ -1330,6 +1392,19 @@ export function explodeMob(m) {
     }
     player.vy = Math.max(player.vy, 6 * falloff);
   }
+  /* AI 玩家：和玩家同一套距离衰减 + 击退。苦力怕追的是谁就炸谁，
+   * 少这一段的话它会一路贴着 bot 自爆，bot 却毫发无伤。 */
+  if (botHook.list) for (const b of botHook.list) {
+    if (b.dead) continue;
+    const bd = Math.hypot(b.x - cx, b.z - cz);
+    if (bd < reach && Math.abs(b.y + 0.9 - cy) < R + 1.2) {
+      const falloff = 1 - bd / reach;
+      /* damageBot 内部会把 kx 乘 5 并补一次 vy，所以这里给 1.8 就等价于
+       * 玩家那条路的 9 格水平击退。 */
+      botHook.damage(b, Math.max(1, Math.round(D.fuse.dmg * falloff)),
+                     (b.x - cx) / (bd || 1) * 1.8, (b.z - cz) / (bd || 1) * 1.8);
+    }
+  }
   /* 周围生物：先快照再遍历 —— 史莱姆被炸死会分裂、往 mobs 里 push 新对象，
    * 直接 for-of 活着数组会让刚分裂出来的小史莱姆也吃一次爆炸伤害。 */
   for (const o of mobs.slice()) {
@@ -1377,6 +1452,22 @@ export function updateArrows(dt) {
         damageMob(m, a.dmg, (a.vx / hs) * 0.6, (a.vz / hs) * 0.6);
         hits++;
         arrows.splice(i, 1); gone = true; break;
+      }
+      /* 敌方箭命中 AI 玩家：判在玩家之前 —— 箭撞到谁就先伤谁，
+       * 站在玩家身前的 bot 因此真的能「挡一刀」。碰撞箱与玩家同尺寸
+       * （半宽 PW、高 1.8，见 bots.js 的 BOT_W / BOT_H）。 */
+      if (!gone && a.foe && botHook.list) {
+        for (const b of botHook.list) {
+          if (b.dead) continue;
+          if (a.x > b.x - PW && a.x < b.x + PW &&
+              a.y > b.y && a.y < b.y + 1.8 &&
+              a.z > b.z - PW && a.z < b.z + PW) {
+            const hs = Math.hypot(a.vx, a.vz) || 1;
+            botHook.damage(b, a.dmg, (a.vx / hs) * 0.6, (a.vz / hs) * 0.6);
+            if (puff) puff(a.x, a.y, a.z, [196, 84, 84]);
+            arrows.splice(i, 1); gone = true; break;
+          }
+        }
       }
       /* 敌方箭命中玩家：AABB 用玩家碰撞箱（半宽 PW、高 1.8）。
        * 旁观模式下玩家「不存在」，箭直接穿过去。 */

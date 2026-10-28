@@ -3,7 +3,7 @@
 import { MODE, mode, running, selected, setBreakHeld, setLastAction, setPlaceHeld, setPlaceRepeat, setSpectate, spectate } from './state.js'
 import { doBreak, doPlace } from './actions.js'
 import { blip } from './audio.js'
-import { REACH } from './config.js'
+import { REACH_ATTACK } from './config.js'
 import { camEye } from './loop.js'
 import { clamp } from './math.js'
 import { MOB_TYPES, raycastMob } from './mobs.js'
@@ -52,7 +52,7 @@ window.addEventListener('keydown', (e) => {
         const e = camEye();
         const cp = Math.cos(e.pitch), sp = Math.sin(e.pitch);
         const dx = -Math.sin(e.yaw) * cp, dy = sp, dz = -Math.cos(e.yaw) * cp;
-        const hit = raycastMob(e.x, e.y, e.z, dx, dy, dz, REACH);
+        const hit = raycastMob(e.x, e.y, e.z, dx, dy, dz, REACH_ATTACK);
         if (hit) {
           setSpectate(hit.mob);
           blip(880, 0.09, 'sine', 0.06);

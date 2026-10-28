@@ -9,7 +9,7 @@
 import { shallowReactive } from 'vue'
 import { setCanvas } from './game/canvasHost.js'
 
-export { setTagHook, ui } from './game/uiState.js'
+export { setFatal, setTagHook, ui } from './game/uiState.js'
 import { ui as uiState } from './game/uiState.js'
 
 /* MODE 是编译期常量（state.js 是纯数据叶模块，不依赖 vue / DOM / GL），
