@@ -1,0 +1,13 @@
+# Cloudflare Pages 响应头
+#
+# 构建产物带内容哈希（index-BjhSJWin.css / index-Cu_zT9MC.js），
+# 文件名一变内容必变 —— 所以可以放心让浏览器永久缓存，连 304 都省掉。
+# index.html 刻意不设长缓存：它是「哪份哈希才是当前版本」的唯一入口。
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), microphone=(), camera=()
