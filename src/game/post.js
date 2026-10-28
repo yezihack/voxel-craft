@@ -562,8 +562,25 @@ export function drawMobs(cam) {
     const D = MOB_TYPES[m.type];
     const base = M4.mul(M4.trans(m.x, m.y, m.z), M4.rotY(m.yaw));
     const moving = Math.min(1, Math.hypot(m.vx, m.vz) / (D.speed || 1));
-    const hurt = m.hurtFlash > 0;
-    gl.uniform3f(uT, hurt ? 2.0 : 1, hurt ? 0.55 : 1, hurt ? 0.55 : 1);
+    /* 着色三态：正常 / 被打中（纯红一闪）/ 白天见光烧（橙红 + 跳动）。
+     * 两者必须分开算 —— 燃烧时 sunburnTick 会持续把 hurtFlash 抬到 0.12 当底噪，
+     * 如果还按「hurtFlash > 0 就叠加受伤红」，绿色通道会被压到 0，
+     * 整只僵尸变成一块血红色，看着像被打了而不是在烧。 */
+    const burn = Math.min(1, m.burnFx || 0);
+    const hurt = m.hurtFlash > 0.2 ? 1 : 0;
+    const flick = 0.5 + 0.5 * Math.sin(m.animT * 26);   // 火苗抖动
+    if (burn > 0.01) {
+      /* 橙：红拉高，绿留 0.5~0.85 随火苗抖，蓝压到 0.15 —— 有绿才是火，没绿是血。 */
+      gl.uniform3f(uT,
+        1 + burn * (1.3 + 0.2 * flick) + hurt * 0.4,
+        1 - burn * (0.35 - 0.2 * flick) - hurt * 0.25,
+        1 - burn * 0.85,
+      );
+    } else if (hurt) {
+      gl.uniform3f(uT, 2.0, 0.55, 0.55);
+    } else {
+      gl.uniform3f(uT, 1, 1, 1);
+    }
     bindMob(g);
     for (const p of g.parts) {
       let model = base;

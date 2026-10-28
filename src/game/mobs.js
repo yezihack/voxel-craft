@@ -378,6 +378,9 @@ export function spawnMob(type, x, y, z, yaw) {
     onGround: false, animT: 0, hurtFlash: 0, atkT: 0,
     wanderT: 0, moveX: 0, moveZ: 0, fleeT: 0, hopCd: 0,
     fuseT: 0, hopCd2: 0,        // 苦力怕引信 / 史莱姆弹跳冷却（AI 里仍带 || 0 兜底）
+    /* 白天见光烧的状态。字段在这里显式铺好，别让 sunburnTick 用 || 0
+     * 现场补 —— 对象形状中途变化会让 V8 退化到字典模式。 */
+    burning: false, burnFx: 0, burnPt: 0, skyT: 0,
   };
   /* 傀儡认家：闲下来会走回出生点附近，不会被闲逛带跑，也不会因为
    * 玩家跑远就被距离回收掉（见 updateMobs 的回收条件）。 */
@@ -449,6 +452,48 @@ export function surfaceY(x, z) {
 export const MOB_HOP_V = JUMP_V * 0.9;
 /* 蜘蛛爬墙速度（格/秒）。比走路略慢 —— 爬墙是该快的场面，但不该比追人还快。 */
 export const SPIDER_CLIMB = 3.2;
+
+/* ---------------- 白天见光就烧 ----------------
+ * 僵尸 / 骷髅暴露在阳光下会持续掉血（经典设定）。
+ * 判据是「头顶一路到世界顶没有实心方块」—— 躲在树荫、洞里、水下、玻璃顶下
+ * 都安全，所以夜里刷出来的怪不会一到白天就集体蒸发，只有真正晒着的才烧。
+ *
+ * 每只怪 0.4 秒才重算一次头顶：64 只满编也就 160 次/秒的竖直扫描，
+ * 比每帧扫一遍便宜两个数量级。 */
+const SUNBURN_TYPES = { zombie: 1, skeleton: 1 };
+export const SUNBURN_DPS = 2.2;      // 20 血的僵尸约 9 秒烧死，比一刀一刀砍慢，但够逼它退场
+
+function underOpenSky(x, y, z) {
+  const xi = Math.floor(x), zi = Math.floor(z);
+  for (let yy = Math.floor(y) + 1; yy < H; yy++) {
+    if (isSolid(getEffective(xi, yy, zi))) return false;
+  }
+  return true;
+}
+
+function sunburnTick(m, dt) {
+  m.skyT = (m.skyT || 0) - dt;
+  if (m.skyT <= 0) {
+    m.skyT = 0.4;
+    m.burning = !isNight() && underOpenSky(m.x, m.y + 0.1, m.z);
+  }
+  if (!m.burning) {
+    m.burnFx = Math.max(0, (m.burnFx || 0) - dt * 2.5);   // 进阴影后火苗渐熄
+    return;
+  }
+  m.burnFx = Math.min(1, (m.burnFx || 0) + dt * 3);
+  m.hp -= SUNBURN_DPS * dt;
+  /* 让身体一直保持一点红：hurtFlash 本来只用来做「被打中」的一闪，
+   * 这里当持续燃烧的底噪用，渲染层会把它和 burnFx 叠加。 */
+  m.hurtFlash = Math.max(m.hurtFlash, 0.12);
+  /* 火苗粒子：每 0.3 秒一小簇，从身体中段往上飘 */
+  m.burnPt = (m.burnPt || 0) - dt;
+  if (m.burnPt <= 0) {
+    m.burnPt = 0.3;
+    spawnParticles(m.x, m.y + MOB_TYPES[m.type].h * 0.55, m.z, [255, 140, 40]);
+  }
+  if (m.hp <= 0) m.dead = true;
+}
 
 export function mobPhysics(m, dt) {
   const D = MOB_TYPES[m.type];
@@ -948,6 +993,9 @@ export function updateMobs(dt, doSpawn = true) {
     m.hurtFlash = Math.max(0, m.hurtFlash - dt);
     if (m.dead) { mobs.splice(i, 1); continue; }
     mobPhysics(m, dt);
+    /* 白天见光烧：放在 mobPhysics 之后、dead 检查之前 ——
+     * 这样「烧死」和「岩浆烧死」走同一条收尸路径（掉落物照给）。 */
+    if (SUNBURN_TYPES[m.type]) sunburnTick(m, dt);
     if (m.dead) {
       if (!m.silent) mobDeathDrop(m);
       mobs.splice(i, 1);

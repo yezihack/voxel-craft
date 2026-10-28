@@ -101,9 +101,17 @@ window.addEventListener('keyup', (e) => {
 
 /* --------------------------- 鼠标 / 触摸视角 --------------------------- */
 export const SENS = 0.0022;
+
+/* 俯仰的上下界。原来卡在 ±(π/2 - 0.02)，差 1.15° 就顶住 —— 手指滑到那儿
+ * 画面不再动，继续滑也不积累，手感就是「卡死」。
+ * 现在只留 0.0005 rad（0.03°）的余量：纯粹是防 sin/cos 在正好 ±π/2 时的
+ * 数值退化（那会让视图矩阵退化成不可逆，画面翻过来）。
+ * 换句话说，除了「正好垂直」这一点，低头和抬头已经没有限制。 */
+const PITCH_LIM = Math.PI / 2 - 0.0005;
+
 export function addLook(dx, dy) {
   player.yaw -= dx * SENS;
-  player.pitch = clamp(player.pitch - dy * SENS, -Math.PI / 2 + 0.02, Math.PI / 2 - 0.02);
+  player.pitch = clamp(player.pitch - dy * SENS, -PITCH_LIM, PITCH_LIM);
 }
 
 document.addEventListener('mousemove', (e) => {
@@ -174,11 +182,30 @@ canvas.addEventListener('contextmenu', (e) => e.preventDefault());
  * 拖拽和长按在电容屏上本来就分不清，手指稍微停顿一下就会从「转视角」跳成「挖掘」，
  * 再停久一点又变成「放置」。把三个动作挤在同一个手势里必然互相误伤，
  * 所以画布只保留最不会误判的那一个：滑动转向。 */
-export const TOUCH_LOOK = 2.2;      // 触屏灵敏度倍率：手指位移比鼠标粗，放大才跟手
+/* 触屏灵敏度倍率。原来 2.2 —— 滑 100px 转 27.7°，滑 324px 就转满 90°，
+ * 从屏幕顶滑到底能转 234°：手指稍微一动画面就冲到边界，根本瞄不准方块。
+ * 1.15 是「滑 100px 转 14.5°」：滑满一屏（约 800px）才转 116°，
+ * 想低头看脚下要滑大半屏，既能到位又留得住精度。 */
+export const TOUCH_LOOK = 1.15;
+
+/* 单次 touchmove 最多算这么多像素。
+ * 手指滑得快时浏览器会合并事件，一次 delta 可能上百像素；
+ * 更糟的是 touchend 被系统手势吞掉时，下一次 delta 会是「当前位置 - 很久以前的位置」。
+ * 不封顶的话视角会瞬间被甩到边界 —— 这就是「一低头就跳到最抬头」的真相。 */
+const TOUCH_STEP_MAX = 90;
+
 let lookId = null, lookX = 0, lookY = 0;
 
 canvas.addEventListener('touchstart', (e) => {
-  if (!running || lookId !== null) return;
+  if (!running) return;
+  /* 已经有手指在接管视角就忽略第二根 —— 但先确认那根手指还活着：
+   * 它的 touchend 万一没送到，lookId 会一直挂着，之后每次按下都被挡掉，
+   * 基准永远停在旧位置。 */
+  if (lookId !== null) {
+    let alive = false;
+    for (const t of e.touches) if (t.identifier === lookId) alive = true;
+    if (alive) return;
+  }
   const t = e.changedTouches[0];
   lookId = t.identifier;
   lookX = t.clientX; lookY = t.clientY;
@@ -187,14 +214,24 @@ canvas.addEventListener('touchstart', (e) => {
 canvas.addEventListener('touchmove', (e) => {
   for (const t of e.changedTouches) {
     if (t.identifier !== lookId) continue;
-    addLook((t.clientX - lookX) * TOUCH_LOOK, (t.clientY - lookY) * TOUCH_LOOK);
+    let dx = t.clientX - lookX, dy = t.clientY - lookY;
+    const d = Math.hypot(dx, dy);
+    if (d > TOUCH_STEP_MAX) { dx = dx / d * TOUCH_STEP_MAX; dy = dy / d * TOUCH_STEP_MAX; }
+    addLook(dx * TOUCH_LOOK, dy * TOUCH_LOOK);
     lookX = t.clientX; lookY = t.clientY;
     e.preventDefault();            // 阻止页面跟着手指滚动 / 下拉刷新
   }
 }, { passive: false });
 
 const endLook = (e) => {
-  for (const t of e.changedTouches) if (t.identifier === lookId) lookId = null;
+  let hit = false;
+  for (const t of e.changedTouches) if (t.identifier === lookId) hit = true;
+  /* 兜底：这根手指的 touchend 没送到我们手上（被系统手势 / 遮罩 / 元素移除吞掉），
+   * 但页面上已经没有手指了 —— 那就别管 identifier，直接复位。
+   * 少了这一步，lookId 会一直挂着，下一次 touchstart 被 `lookId !== null` 挡掉，
+   * lookX/lookY 停在很久以前的位置，于是下一次滑动就是一次几百像素的跳变。 */
+  if (!hit && e.touches.length > 0) return;
+  lookId = null;
 };
 canvas.addEventListener('touchend', endLook);
 canvas.addEventListener('touchcancel', endLook);

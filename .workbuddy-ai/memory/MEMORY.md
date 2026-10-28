@@ -18,6 +18,11 @@
 - 远程攻击可复用骷髅 `shootArrowAt(foe:true)`（只认玩家）。
 - 凋灵爆破：只借 `explodeMob` 的球形破坏方块循环，**不要**直接调 `explodeMob`
   （那会置 `m.dead=true` 让 boss 自杀），伤害单独算。
+- **僵尸 / 骷髅白天见光烧**：`SUNBURN_TYPES` + `underOpenSky`（头顶扫到 H=64，
+  遇实心方块即遮住）+ 每 0.4 秒重算一次（`m.skyT`）。挂在 updateMobs 的
+  mobPhysics 之后、dead 检查之前，和岩浆烧死走同一条收尸路径。
+  渲染三态 tint 里**燃烧不能复用「受伤红」** —— sunburnTick 用 hurtFlash=0.12
+  当底噪，按 `>0` 判受伤会把绿通道压到 0，僵尸变一块血红。判 `>0.2`。
 
 ## 贴图（textures.js）
 - 程序化贴图走 noiseTile 基础 + 覆盖层；物品蛋图标正则 `^item_egg_\w+$`
@@ -45,6 +50,12 @@
   别再把「按住挖 / 长按放」塞回画布 —— 电容屏分不清停顿与长按。
 - `pointerdown` 必须跳过 `pointerType === 'touch'`，否则 pointer 与 touch 两套监听
   会把同一次滑动各算一遍。
+- **触屏视角（input.js）**：`TOUCH_LOOK = 1.15`（滑 100px 转 14.5°），
+  单次 touchmove 用 `TOUCH_STEP_MAX = 90` 封顶。`PITCH_LIM = π/2 - 0.0005` ——
+  只留这点余量防视图矩阵在正好 ±π/2 时退化（画面翻转），**不能真删**。
+  `endLook` 必须有「identifier 对不上但页面上没手指 → 无条件复位」兜底：
+  少了它 `lookId` 会永久挂着，下一次滑动的 delta 是几百像素，
+  视角瞬间甩到边界（表现为「一低头就跳到最抬头」）。
 - `touchPlace` 维护的是 `placeHeld` + `placeRepeat`，所以弓蓄力、盾牌格挡、
   连发铺路全部自动复用；新增长按类功能时优先接这两个 flag，别再开新状态。
 - 触屏控件隐藏时必须复位按住状态（摇杆/挖掘/放置/跳/潜），
@@ -83,10 +94,15 @@
   **必须分开**。攻击也吃 13 会变成隔空点杀。
 
 ## 无头测试（.scratch/<topic>/probe.mjs）踩坑
+- **改完代码跑测试前必须重启 dev server**。HMR 会让 `import('/src/game/xxx.js')`
+  拿到**另一个模块实例**：`player.pitch` 恒 0、`mobs[0].burning` 恒 false，
+  看着像改动没生效，其实画面上一切正常。判断改动是否生效优先看截图。
 - **`import('/src/engine.js')` 在 dev 下拿到的是另一个模块实例**（vite 的 HMR query
   与组件不同），读到的是 `NOT_READY_KEYS` 占位 noop。判断「按钮能不能点」只能靠
   DOM 观察（`.veil` 有没有 `hide`），别 import 后读 `engine.xxx`。
 - 等「地形就绪」要**连续 3 次采样一致**，只等一次会在进度条抖动时假通过。
+- 生物测试里怪会追玩家（实测 1.3 秒走 5 格）：截图要开 `player.fly` 悬停 +
+  `setInterval` 把怪钉在原地；测「头顶遮挡」要盖**整片**天花板，只盖一格它走两步就晒到。
 - textures.js 顶部 `document.createElement('canvas')` 在 node 直跑会报
   `document is not defined`：probe 不要 import textures.js，改用迷你 BLOCKS 表
   纯逻辑复刻谓词做等价校验。
