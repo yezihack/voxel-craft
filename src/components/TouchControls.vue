@@ -29,6 +29,10 @@ function bindStick(el, knob, onMove, onEnd) {
   const R = () => el.clientWidth * 0.36
 
   const onStart = (e) => {
+    /* 摇杆一次只认一根手指：第二根手指落到圆盘上时直接忽略。
+     * 不拦的话 id 会被后按下的那根覆盖，先按的那根抬起时 identifier 对不上，
+     * 复位逻辑永远等不到它的 touchend —— 摇杆就卡在最后那个方向上了。 */
+    if (id !== null) return
     const t = e.changedTouches[0]
     id = t.identifier
     const r = el.getBoundingClientRect()
@@ -49,12 +53,15 @@ function bindStick(el, knob, onMove, onEnd) {
     }
   }
   const onEndEvt = (e) => {
-    for (const t of e.changedTouches) {
-      if (t.identifier !== id) continue
-      id = null
-      knob.style.transform = ''
-      onEnd()
-    }
+    let hit = false
+    for (const t of e.changedTouches) if (t.identifier === id) hit = true
+    /* 兜底：这根手指的 touchend 没送到我们手上（被系统手势 / 遮罩 / 元素移除吞掉），
+     * 但页面上已经没有手指了 —— 那就别管 identifier，直接复位。
+     * 少了这一步，摇杆会停在最后那个方向，人一直往前走。 */
+    if (!hit && e.touches.length > 0) return
+    id = null
+    knob.style.transform = ''
+    onEnd()
   }
 
   el.addEventListener('touchstart', onStart, { passive: false })

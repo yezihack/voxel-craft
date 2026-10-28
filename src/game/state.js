@@ -45,7 +45,8 @@ export function setSpectate(v) { spectate = v; }
 export let rideCart = null;
 export function setRideCart(v) { rideCart = v; }
 
-/* 世界类型：false = 经典起伏地形，true = 超平坦（地表恒高、无结构无树）。
+/* 世界类型：false = 经典起伏地形，true = 超平坦（地表恒高、无树无花草，
+ * 但村庄 / 遗迹 / 矿井这些建筑照常生成）。
  * 只在 dim === 0 生效（异界有自己的生成器），换这个值必须清列缓存并重建区块。 */
 export let flatWorld = false;
 export function setFlatWorld(v) { flatWorld = v; }

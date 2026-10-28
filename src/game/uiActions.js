@@ -175,7 +175,7 @@ export function pickWorldType(flat) {
     player.vy = 0
     player.spawn = [player.x, player.y, player.z]
   }
-  toast(v ? '▬ 超平坦世界：地表恒高，无村庄无树林，适合搭轨道与装置'
+  toast(v ? '▬ 超平坦世界：一马平川无树林，村庄 / 遗迹 / 矿井照旧生成'
           : '⛰️ 经典世界：起伏地形 + 村庄 / 遗迹 / 矿井')
   blip(v ? 620 : 420, 0.10, 'sine', 0.05)
 }

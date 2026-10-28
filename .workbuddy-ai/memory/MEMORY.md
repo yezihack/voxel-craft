@@ -5,6 +5,9 @@
   一律不算不透明，薄片不遮挡邻面 —— 改这里会影响火把/铁轨等薄片是否透视。
 - mesher.js `buildChunk` 用 6 面邻居 `isOpaque` 做面剔除；薄片（火把/铁轨）
   若被误判不透明会让相邻实心块朝向它的面被剔 → 透视穿帮。
+- **超平坦世界（flatWorld）会生成结构**（村庄/遗迹/矿井），但不生成树/花草/
+  仙人掌/水。`generate.js` 的 flatWorld 分支里 `structBlockAt` 必须放在最前面
+  且覆盖**所有 y**（村庄有地基、矿井整条在地下），之后才是草/土/石分层。
 
 ## 生物（mobs.js）架构约定
 - MOB_TYPES 条目用 flag 分派 AI：`boss` 必须放在 `if (D.hostile)` **之前**，
@@ -46,6 +49,12 @@
   连发铺路全部自动复用；新增长按类功能时优先接这两个 flag，别再开新状态。
 - 触屏控件隐藏时必须复位按住状态（摇杆/挖掘/放置/跳/潜），
   否则遮罩抢走焦点后 `touchend` 不来，人会自己一直往前走。
+- 摇杆 → 方向键的换算在 **`stick.js`**（`applyStickInput` / `releaseStick`），
+  靠 `stickInput.active` 的「接管期」保证**归零那一帧也写 false**。
+  别在 loop 里再写 `if (stickVec.x || stickVec.y)` —— 那样松手后向量归零、
+  分支被跳过，上一帧的 `input.f = true` 没人清，人会一直往前走。
+- `engine.js` 给模板会用到的动作铺了 noop 占位：引擎是异步拉起的，开始面板
+  第一帧就可点，不铺占位会抛 `engine.xxx is not a function`。
 - 触屏渲染倍率上限 1.5（桌面 2.0），见 `loop.js` 的 `resize()`。
 - 触屏没有键盘：存档/读档/暂停/换模式都要有按钮入口（暂停面板 + 右上系统按钮）。
 

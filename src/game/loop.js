@@ -18,6 +18,7 @@ import { tickAutoSave } from './save.js'
 import { AMBIENT, FOG_FAR, FOG_HEIGHT, FOG_NEAR, SHADER_T, SKY, atlasTex, composite, drawArrows, drawBotDrops, drawBots, drawCarts, drawChunkBlend, drawChunkOpaque, drawHandView, drawMobs, ensureFbos, lineBuf, postOK, runBloom, sceneFbo, updateSkyColor, uploadChunk } from './post.js'
 import { canvas, gl, locLine, locMain, progLine, progMain } from './renderer.js'
 import { drawSky } from './sky.js'
+import { applyStickInput } from './stick.js'
 import { cancelDig, digProgress, heldId, invCount, invTake, updateDig, updateSurvival } from './survival.js'
 import { P } from './textures.js'
 import { syncHurt, syncVitals } from './uiSync.js'
@@ -92,6 +93,8 @@ export function camEye() {
   return { x: player.x, y: player.y + EYE, z: player.z, yaw: player.yaw, pitch: player.pitch };
 }
 
+/* 摇杆当前是否在接管方向键 —— 状态收在 stick.js 里（见那里的说明）。 */
+
 export function frame(now) {
   requestAnimationFrame(frame);
   const t = now / 1000;
@@ -107,12 +110,10 @@ export function frame(now) {
 
   resize();
 
-  // 触屏摇杆 → 输入
-  if (stickVec.x || stickVec.y) {
-    const dead = 0.22;
-    input.f = stickVec.y < -dead; input.b = stickVec.y > dead;
-    input.l = stickVec.x < -dead; input.r = stickVec.x > dead;
-  }
+  /* 触屏摇杆 → 输入。归零那一帧也必须写一遍 false，
+   * 否则上一帧的 input.f = true 没人清，松手后人会一直往前走。
+   * 换算逻辑与「接管期」都收在 stick.js 里，那边可以在 node 里单测。 */
+  applyStickInput(stickVec, input);
   if (lookVec.x || lookVec.y) addLook(lookVec.x * 11, lookVec.y * 11);
 
   if (running && !paused) {

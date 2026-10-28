@@ -18,10 +18,13 @@ export function getBlock(x, y, z) {
   if (yi >= H) return 0;                // 上方是天空
 
   /* 超平坦：地表以上一律空气，地表以下只按深度分层。
-   * 结构和树**必须整段跳过** —— 村庄的选址判据是「九点高度极差 ≤ 4」，
-   * 在绝对平的图上每格都成立，于是每隔 96 格就冒出一座村庄、连成一片，
-   * 那就不是超平坦而是「超城市」了。石层照旧（矿脉还在，平坦不等于挖不到东西）。 */
+   * 树、花草、南瓜、仙人掌、水——一律不生成，这是「超平坦」这个名字的承诺。
+   * 但**村庄 / 遗迹 / 矿井照样生成**：结构格按 FLAT_H 选址，平地上照样能盖出
+   * 房子和坑道。结构要放在最前面判（所有 y），因为村庄有地基、矿井整条在地下，
+   * 只查地表那一层会只剩屋顶。 */
   if (flatWorld) {
+    const s = structBlockAt(xi, yi, zi);
+    if (s !== null) return s;
     if (yi > FLAT_H) return 0;
     if (yi === FLAT_H) return I.GRASS;
     if (yi > FLAT_H - 4) return I.DIRT;
