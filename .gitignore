@@ -6,6 +6,9 @@ dist-ssr
 # 截图产物：由 .scratch/mobile/shot.mjs 随时重新生成，别把几 MB 的 PNG 塞进仓库
 .scratch/**/*.png
 
+# 命令输出日志：wrangler 的 login/whoami 日志里带账号邮箱，不能进公开仓库
+.scratch/**/*.log
+
 # 编辑器 / 系统
 .vscode/*
 !.vscode/extensions.json

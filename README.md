@@ -6,6 +6,8 @@
 一个可玩的 Minecraft 风格沙盒：8 个维度、84 种方块、87 种物品、16 种生物 + 3 只 Boss、
 会自己盖房子的 AI 玩家、本地存档，键盘与触屏双端可玩。
 
+**🎮 在线试玩：<https://voxel-craft-516.pages.dev/>**（桌面 / 手机浏览器直接打开）
+
 - **技术栈**：Vue 3（只负责 UI 层）+ Vite + 原生 WebGL 2 / WebGL 1 自动降级
 - **零运行时依赖**：`vue` 是唯一的 production dependency
 - **离线可玩**：贴图全部程序化生成，无任何图片资源文件
@@ -209,6 +211,7 @@ node .scratch/<topic>/probe.mjs  # 无头冒烟测试
 | `.scratch/bots/` | AI 玩家合成 / 盖房 / 掉落 |
 | `.scratch/gear/` | 星陨武器 / 盔甲 / 盾牌 / 存档 |
 | `.scratch/mobile/` | HUD 移除 + 触屏重做 |
+| `.scratch/cf/` | 线上验收（打开 Cloudflare 地址截图 + 抓控制台报错） |
 
 移动端布局用 Playwright 起真触屏上下文实测（`.scratch/mobile/shot.mjs`），
 量元素矩形判断控件是否互相压住 —— 光看构建通过发现不了这类问题。
@@ -217,16 +220,20 @@ node .scratch/<topic>/probe.mjs  # 无头冒烟测试
 
 ## 部署
 
-产物是纯静态文件，任意静态托管都能放。
+产物是纯静态文件，任意静态托管都能放。当前线上版本跑在 Cloudflare Pages。
 
 ### Cloudflare Pages
 
 ```bash
+npx wrangler login                       # 首次：浏览器里授权
+npx wrangler pages project create voxel-craft --production-branch=main
 npm run build
-npx wrangler pages deploy dist --project-name voxel-craft
+npx wrangler pages deploy dist --project-name voxel-craft --branch=main
 ```
 
-首次需要 `npx wrangler login`。也可以在 Cloudflare Dashboard 里连 GitHub 仓库，
+线上地址：<https://voxel-craft-516.pages.dev/>
+
+也可以在 Cloudflare Dashboard 里直接连 GitHub 仓库做自动部署，
 构建设置填：Build command `npm run build`，Output directory `dist`。
 
 ### 本地预览
