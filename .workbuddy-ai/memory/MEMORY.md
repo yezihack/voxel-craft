@@ -64,5 +64,25 @@
 3. 写 `.scratch/<topic>/spec.md` 工单（根因 / 做法 / 验证）。
 4. `.workbuddy-ai/memory/YYYY-MM-DD.md` 追加当日工作；`git add -A && git commit`。
 
+## 仓库与线上环境（2026-10-28 建立）
+- GitHub：https://github.com/yezihack/voxel-craft（public）。
+  `main` 是发布分支，`fix` 是开发分支（2026-10-28 已与 main 同步），`dev` 停在旧的学习层规划提交。
+- Cloudflare Pages 项目名 `voxel-craft`，production branch = `main`，
+  线上 <https://voxel-craft-516.pages.dev/>。重新部署：
+  `npm run build && npx wrangler@3 pages deploy dist --project-name voxel-craft --branch=main`
+- 构建产物：~99 modules，gzip 合计约 126 kB（JS 120 + CSS 4.5）。
+  `public/_headers` 给 `/assets/*` 配 immutable 缓存，index.html 不长缓存。
+- 线上验收脚本 `.scratch/cf/verify.mjs`：Playwright 打开真实地址，
+  断言标题 / WebGL 上下文 / 零控制台报错。改动渲染或启动流程后跑一次。
+
+## 部署踩坑
+- `npx wrangler` 不带版本会 notarget 失败，用 `npx wrangler@3`。
+- `wrangler login` 的 OAuth 授权页只有 2 分钟有效期，超时重来。
+- 后台跑交互式命令不要接管道（`| head` 会缓冲到进程退出才出内容），
+  用 `> file.log 2>&1` 再 `cat`。
+- playwright 的 ESM import 不吃 `NODE_PATH`，要
+  `createRequire(PW_ROOT + '/x.js')` 再 `req('playwright')`。
+- `.scratch/**/*.log` 必须 gitignore：wrangler 的 login/whoami 日志带账号邮箱。
+
 ## 提交风格
 - 中文 commit message，祈使句，概括根因 + 新增内容。
