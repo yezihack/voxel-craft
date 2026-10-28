@@ -64,7 +64,7 @@ const ST = await import('../../src/game/state.js');
 const { getBlock } = await import('../../src/game/generate.js');
 const { FLAT_H } = await import('../../src/game/world.js');
 const { CELL, structAnchor, structAt } = await import('../../src/game/dims.js');
-const { applyStickInput, releaseStick, stickInput, STICK_DEAD } =
+const { applyStickInput, stickInput, STICK_DEAD } =
   await import('../../src/game/stick.js');
 
 let fails = 0;
@@ -128,10 +128,10 @@ console.log('\n[1] 触屏摇杆 → 方向键');
   for (let i = 0; i < 3; i++) applyStickInput(stick, input);
   ok(input.f === true, '没碰摇杆时不动键盘状态（W 按住仍然前进）');
 
-  // 面板 / 遮罩抢焦点：强制松手
+  // 面板 / 遮罩抢焦点：把向量清零（等价于 engine.setStick(0,0)），下一帧必须松手
   input.f = true; stick.y = -1; applyStickInput(stick, input);
-  releaseStick(stick, input);
-  ok(!input.f && stick.x === 0 && stick.y === 0, 'releaseStick 强制松手并清向量');
+  stick.x = 0; stick.y = 0; applyStickInput(stick, input);
+  ok(!input.f && stick.x === 0 && stick.y === 0, '向量清零后方向键立刻松开');
 }
 
 /* ====================== 2. 超平坦：干净地面 + 建筑 ====================== */

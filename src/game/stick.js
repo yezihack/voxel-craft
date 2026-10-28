@@ -28,12 +28,3 @@ export function applyStickInput(stick, input) {
   input.r = stick.x > dead;
   if (!stick.x && !stick.y) stickInput.active = false;
 }
-
-/* 面板打开 / 死亡 / 切维度时强制松手。
- * 手指还压在摇杆上时被遮罩抢走焦点，touchend 可能永远不来 ——
- * 那时得由调用方显式把向量清零，再走一次这里把方向键写回 false。 */
-export function releaseStick(stick, input) {
-  stick.x = 0; stick.y = 0;
-  stickInput.active = true;          // 借一次接管把 false 写下去
-  applyStickInput(stick, input);
-}
