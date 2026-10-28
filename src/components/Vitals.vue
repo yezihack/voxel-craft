@@ -33,7 +33,7 @@ const bubbles = computed(() => {
 </script>
 
 <template>
-  <div v-if="ui.survival" class="vitals">
+  <div v-if="ui.survival" class="vitals" :class="{ touch: ui.touch }">
     <div v-show="ui.airVisible" class="row airRow">
       <VitalIcon v-for="(c, i) in bubbles" :key="`a${i}`" id="icBub" :cls="c" />
     </div>
@@ -120,11 +120,34 @@ svg {
   }
 }
 
-/* 触屏：底部被 9 格快捷栏占着，生命条要再抬高一档才不会压在上面。
- * 100px 是按「大屏平板」算的（那边快捷栏 58px 格，整体高 78、占到底部 96）。 */
-@media (pointer: coarse) {
-  .vitals {
-    bottom: 100px
-  }
+/* 触屏：底部整条都是拇指区 —— 左边摇杆、右边 2×2 动作区，两者底边都在
+ * 100px 处，而生命条原来也在 100px，结果 10 颗心正好横穿摇杆和「挖 / 放」，
+ * 把按钮压在下面。竖屏更惨：中间只剩几十像素，放哪都压。
+ * 所以触屏一律挪到左上角 —— 与右上的系统栏对称，两边都碰不到手指。
+ * top 让到 52px：360 宽屏时系统栏（210px 宽，右对齐）会一直伸到 x=138，
+ * 而 10 颗心到 x=149，压在 10px 那一档上就会撞，下移一行彻底分开。 */
+.vitals.touch {
+  left: calc(10px + env(safe-area-inset-left, 0px));
+  top: calc(52px + env(safe-area-inset-top, 0px));
+  bottom: auto;
+  transform: none;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+/* 10 颗心按 16px 排是 178px，占窄屏一半，缩到 13px */
+.vitals.touch .row {
+  height: 13px;
+  gap: 1px;
+}
+
+.vitals.touch svg {
+  width: 13px;
+  height: 13px;
+}
+
+.vitals.touch .airRow svg {
+  width: 11px;
+  height: 11px;
 }
 </style>

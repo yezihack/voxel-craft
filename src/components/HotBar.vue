@@ -55,4 +55,22 @@ function titleOf(s) {
     border-radius: 13px;
   }
 }
+
+/* 再窄一档：格子本身在 ItemSlot 里缩到 32 / 28，这里把间隙和留白同步收掉。
+ * 尺寸全部由格子决定，不给容器设 max-width —— flex 不会自动缩子元素，
+ * 设了只会让背景比内容窄，反而更难看。 */
+@media (max-width: 400px) {
+  .hotbar {
+    gap: 4px;
+    padding: 5px;
+  }
+}
+
+@media (max-width: 350px) {
+  .hotbar {
+    gap: 3px;
+    padding: 4px;
+    border-radius: 11px;
+  }
+}
 </style>

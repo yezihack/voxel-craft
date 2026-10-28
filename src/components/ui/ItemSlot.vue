@@ -211,4 +211,25 @@ defineEmits(['pick'])
     bottom: 1px;
   }
 }
+
+/* 窄竖屏（≤400px，360 宽的安卓机是主流）：36px 的 9 格加上间隙是 366，
+ * 比屏幕还宽 —— 首尾两格会被边缘裁掉，点都点不到。再缩一档。 */
+@media (max-width: 400px) {
+  .slot {
+    width: 32px;
+    height: 40px;
+    --ic: 20px;
+    border-radius: 8px;
+  }
+}
+
+/* 极窄（≤350px，如 iPhone SE 一代 320 宽）：28px 一格，9 格共 252。 */
+@media (max-width: 350px) {
+  .slot {
+    width: 28px;
+    height: 36px;
+    --ic: 18px;
+    border-radius: 7px;
+  }
+}
 </style>

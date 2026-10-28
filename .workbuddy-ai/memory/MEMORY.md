@@ -57,6 +57,12 @@
   第一帧就可点，不铺占位会抛 `engine.xxx is not a function`。
 - 触屏渲染倍率上限 1.5（桌面 2.0），见 `loop.js` 的 `resize()`。
 - 触屏没有键盘：存档/读档/暂停/换模式都要有按钮入口（暂停面板 + 右上系统按钮）。
+- **竖屏底部整条是拇指区**：左摇杆 + 右 2×2 动作区底边都在 `bottom: 100px`，
+  所以 `Vitals`（生命/饥饿/氧气）**不能放底部居中**，触屏一律走 `.vitals.touch`
+  挪到左上角 `top: 52px`（低于右上系统栏，360 宽时会撞）。
+  加任何新的底部居中 HUD 之前，先想清楚它会不会压在拇指区上。
+- 底部 9 格物品栏在 ≤400px 要缩到 32×40、≤350px 缩到 28×36（见 `ItemSlot.vue`），
+  否则 360 宽的安卓机就会裁掉首尾两格。`HotBar` 只收 gap/padding，**不设 max-width**。
 - 手机闪退三堵（2026-10-28）：触屏判定放宽到 `coarse || innerWidth <= 900`
   （有的安卓 WebView 报 fine）；`pointerlockerror` 在 `ui.touch` 下直接 return；
   `webglcontextlost` → 存档 + reload，`visibilitychange` 切后台 → 存档 + 暂停，
@@ -77,6 +83,10 @@
   **必须分开**。攻击也吃 13 会变成隔空点杀。
 
 ## 无头测试（.scratch/<topic>/probe.mjs）踩坑
+- **`import('/src/engine.js')` 在 dev 下拿到的是另一个模块实例**（vite 的 HMR query
+  与组件不同），读到的是 `NOT_READY_KEYS` 占位 noop。判断「按钮能不能点」只能靠
+  DOM 观察（`.veil` 有没有 `hide`），别 import 后读 `engine.xxx`。
+- 等「地形就绪」要**连续 3 次采样一致**，只等一次会在进度条抖动时假通过。
 - textures.js 顶部 `document.createElement('canvas')` 在 node 直跑会报
   `document is not defined`：probe 不要 import textures.js，改用迷你 BLOCKS 表
   纯逻辑复刻谓词做等价校验。
