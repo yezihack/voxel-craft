@@ -28,6 +28,10 @@
 - 程序化贴图走 noiseTile 基础 + 覆盖层；物品蛋图标正则 `^item_egg_\w+$`
   自动走 `eggIconTile`，不占新格。boss 需显式登记 MOB_TILE_COLORS 基色。
 
+- 导入导出（2026-10-29）：save.js 的 `exportSaveJson` 导出的就是 SAVE_KEY
+  原始 JSON（无档退回内存快照）；`importSaveJson` 只做 parse+版本校验后
+  **原样写回 SAVE_KEY**，字段容错全在 applySave —— 两条路永不分叉。
+  导入动作 = 覆盖浏览器存档 + loadNow 立即进世界（uiActions.importSaveFile）。
 ## 装备与存档约定
 - 减伤入口只有 `survival.hurt(n, reason, opts)`：环境伤害（摔落/缺氧/岩浆/
   仙人掌/饥饿）必须传 `{pierce:true}`，外部打击不传 → 走护甲 + 盾牌减免。
