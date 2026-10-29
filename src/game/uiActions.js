@@ -19,7 +19,7 @@ import { chunks } from './mesher.js'
 import { arrows, despawnAllMobs, surfaceY } from './mobs.js'
 import { player } from './player.js'
 import { canvas } from './renderer.js'
-import { countEdits, deleteSave, hasSave, loadGame, saveGame, saveMeta } from './save.js'
+import { countEdits, deleteSave, exportSaveJson, hasSave, importSaveJson, loadGame, saveGame, saveMeta } from './save.js'
 import { HOTBAR_N, activeSlots, cancelDig, invAdd, invCount, invTake, respawn } from './survival.js'
 import {
   MODE, SEED, bowCharge, breakHeld, dim, flatWorld, lookVec, mode, paused, placeHeld,
@@ -319,6 +319,63 @@ export function newWorld() {
   ui.saveRev++
   blip(300, 0.14, 'triangle', 0.05)
   if (typeof location !== 'undefined' && location.reload) location.reload()
+}
+
+/* 把存档导出成一个 .json 文件（浏览器下载）。
+ * 先 saveGame 一遍：保证导出的是「此刻的进度」而不是上次自动存档的旧档。
+ * 下载失败不报异常 —— 有些内嵌 WebView 禁下载，提示玩家换浏览器即可。 */
+export function exportSave() {
+  saveGame()
+  ui.saveRev++
+  const json = exportSaveJson()
+  if (!json) {
+    toast('⚠ 还没有可导出的存档')
+    blip(180, 0.12, 'square', 0.05)
+    return { ok: false, reason: 'none' }
+  }
+  const d = new Date()
+  const pad = (n) => String(n).padStart(2, '0')
+  const name = `voxel-craft-save-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}.json`
+  try {
+    const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = name
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 4000)
+    const kb = Math.max(1, Math.round(json.length / 1024))
+    toast(`⬇ 已导出 ${name} · ${kb} KB`)
+    blip(880, 0.10, 'sine', 0.06)
+    return { ok: true, bytes: json.length }
+  } catch {
+    toast('⚠ 导出失败：当前浏览器不允许下载文件')
+    blip(180, 0.12, 'square', 0.05)
+    return { ok: false, reason: 'download' }
+  }
+}
+
+/* 从文件导入存档：校验 → 覆盖浏览器存档 → 立刻读档进世界。
+ * 「导入即生效」比「导入后还得再点一次继续」直白 —— 文件就是玩家选的那份，
+ * 没有比让世界直接变成它更不容易误解的反馈了。 */
+export async function importSaveFile(file) {
+  if (!file) return { ok: false, reason: 'none' }
+  let text
+  try { text = await file.text() } catch {
+    toast('⚠ 读文件失败')
+    blip(180, 0.12, 'square', 0.05)
+    return { ok: false, reason: 'read' }
+  }
+  const ir = importSaveJson(text)
+  if (!ir.ok) {
+    toast(ir.reason === 'version' ? '⚠ 存档版本不兼容，无法导入' : '⚠ 这个文件不是有效的存档 JSON')
+    blip(180, 0.12, 'square', 0.05)
+    return ir
+  }
+  ui.saveRev++
+  const lr = loadNow()
+  return lr
 }
 
 /* 存档摘要（开始面板 / 暂停面板上显示） */

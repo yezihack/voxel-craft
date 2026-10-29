@@ -31,7 +31,7 @@ export const engine = shallowReactive({})
  * 会用真实现整片覆盖掉这些占位。 */
 const NOT_READY_KEYS = [
   'pickMode', 'pickWorldType', 'startGame', 'newWorld', 'respawnAndStart',
-  'saveNow', 'loadNow', 'saveStatus', 'pauseGame',
+  'saveNow', 'loadNow', 'saveStatus', 'pauseGame', 'exportSave', 'importSaveFile',
   'toggleBag', 'toggleBagExpand', 'cycleMode', 'toggleFly', 'selectSlot',
   'setStick', 'setLook', 'setInputKey', 'touchMine', 'touchPlace',
 ]

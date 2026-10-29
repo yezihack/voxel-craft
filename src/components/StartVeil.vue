@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { engine, ui } from '../engine.js'
 import { MODES } from '../data/modes.js'
 import { VEIL_KEYS } from '../data/veilKeys.js'
@@ -36,6 +36,22 @@ function startNew() {
   if (typeof window !== 'undefined' && window.confirm
       && !window.confirm('删除当前存档并重新开始？这个操作无法撤销。')) return
   engine.newWorld()
+}
+
+/* ---------- 存档文件导出 / 导入 ----------
+ * localStorage 会被「清理浏览器数据」或 iOS 的存储回收整份抹掉，
+ * 光存在浏览器里就是丢档风险。导出成文件后档在玩家手里；
+ * 导入 = 用文件覆盖浏览器存档并立即读进世界。 */
+const fileEl = ref(null)
+
+function pickFile() {
+  fileEl.value?.click()
+}
+
+async function onFile(e) {
+  const f = e.target.files && e.target.files[0]
+  e.target.value = ''        // 同一个文件选第二次也要触发 change，必须清空
+  if (f) await engine.importSaveFile(f)
 }
 </script>
 
@@ -86,6 +102,19 @@ function startNew() {
           💾 保存进度
           <span class="savemeta">手动存一份，下次从这里继续</span>
         </button>
+      </div>
+
+      <!-- 存档文件导入 / 导出：浏览器存储会被清空或回收，档得能落到玩家手里 -->
+      <div class="saverow">
+        <button class="iobtn" @click="engine.exportSave()">
+          ⬇ 导出存档
+          <span class="savemeta">下载 .json 文件，防清浏览器数据丢档</span>
+        </button>
+        <button class="iobtn" @click="pickFile">
+          ⬆ 导入存档
+          <span class="savemeta">选择导出的 .json，导入后直接进入该世界</span>
+        </button>
+        <input ref="fileEl" type="file" accept=".json,application/json" hidden @change="onFile">
       </div>
 
       <div class="hint" @click.self="tryStart" v-html="ui.veilHint" />
@@ -224,6 +253,34 @@ function startNew() {
   font-size: 10.5px;
   color: var(--dim);
   letter-spacing: 0;
+}
+
+/* 导入 / 导出：比「继续存档」低一档的次要操作，用中性描边 ——
+ * 不抢主路径的视觉，但两枚等宽并排，触屏上也是舒适的热区 */
+.iobtn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 14px;
+  border-radius: 11px;
+  cursor: pointer;
+  border: 1.5px solid rgba(255, 255, 255, .16);
+  background: rgba(255, 255, 255, .04);
+  color: var(--txt);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  transition: background .12s, border-color .12s;
+}
+
+.iobtn:hover {
+  background: rgba(255, 255, 255, .10);
+  border-color: rgba(255, 255, 255, .35)
+}
+
+.iobtn .savemeta {
+  font-size: 10px
 }
 
 /* 删档：只放一个图标，红色描边，悬停才变亮 —— 危险动作不该太显眼 */

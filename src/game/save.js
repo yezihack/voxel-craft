@@ -255,6 +255,48 @@ export function loadGame() {
   return applySave(d)
 }
 
+/* ---------------- 导出 / 导入 ----------------
+ * localStorage 并不可靠：清浏览器数据、iOS 的 7 天回收策略、隐私模式配额，
+ * 都会把档直接抹掉。所以除了浏览器存储，还得让玩家能把存档变成一个
+ * 手里握着的 .json 文件 —— 丢不丢是玩家自己的事，不是浏览器的了。
+ *
+ * 导出的就是 SAVE_KEY 里那份原始 JSON（没有任何二次加工），
+ * 导入则反过来：校验后原样写回 SAVE_KEY，然后走正常的 loadGame 流程。
+ * 这样「导出的文件」和「浏览器里的存档」永远是同一种东西，不会分叉。 */
+
+/* 取出可导出的存档 JSON 字符串。
+ * 浏览器里没档时退回内存快照（刚开局还没触发过自动存档也能导出）。 */
+export function exportSaveJson() {
+  const raw = store.get(SAVE_KEY)
+  if (raw) return raw
+  try { return JSON.stringify(snapshot()) } catch { return null }
+}
+
+/* 校验并导入一份存档 JSON 文本。
+ * 只做「能不能存进浏览器」级别的校验（JSON 合法 + 版本号认识），
+ * 字段级的容错由 applySave 负责 —— 那边对每个字段都做了防御。
+ * 导入即替换当前存档：读档由调用方决定（uiActions 里导入后立刻 loadNow）。 */
+export function importSaveJson(text) {
+  let d
+  try { d = JSON.parse(text) } catch { return { ok: false, reason: 'parse' } }
+  if (!d || typeof d !== 'object' || Array.isArray(d)) return { ok: false, reason: 'parse' }
+  if (d.v !== SAVE_VERSION) return { ok: false, reason: 'version' }
+  const json = JSON.stringify(d)
+  const ok = store.set(SAVE_KEY, json)
+  if (!ok) return { ok: false, reason: 'quota' }
+  /* meta 同步重建：开始面板摘要直接就能显示导入档的信息，
+   * 不用等下一次 saveGame 覆盖。blocks 按 edits 表行数现算。 */
+  let blocks = 0
+  if (Array.isArray(d.edits)) for (const list of d.edits) if (Array.isArray(list)) blocks += list.length
+  try {
+    store.set(META_KEY, JSON.stringify({
+      t: Number.isFinite(d.t) ? d.t : Date.now(),
+      dim: d.dim | 0, mode: d.mode | 0, flat: !!d.flat, blocks,
+    }))
+  } catch { /* meta 失败不影响主存档 */ }
+  return { ok: true, bytes: json.length }
+}
+
 /* ---------------- 自动存档 ----------------
  * 由主循环每帧推进；内部自己节流，不需要调用方记时间。
  * 只在「真的在玩」时存（暂停 / 背包打开时不存 —— 那些时刻玩家可能在
