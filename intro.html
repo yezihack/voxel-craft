@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>voxel-craft · 126KB 装下一个 3D 体素世界</title>
+<meta name="description" content="voxel-craft：纯手写 WebGL 的 3D 体素沙盒。8 维度、84 方块、87 物品、16 生物 + 3 Boss、同屏 25 个会盖房的 AI 玩家，键盘与触屏双端可玩，离线可玩，生产构建仅 126KB gzip。">
+<!-- 图标走内联 SVG，和游戏本体一致：不为一个 favicon 塞图片请求 -->
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%230b0d12'/><rect x='24' y='24' width='52' height='52' rx='10' fill='%237ec850'/></svg>">
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-sc@5/400.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-sc@5/700.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-sc@5/900.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/archivo-black@5/400.css">
+<style>
+:root{
+  --bg:#0b0d12; --bg2:#0f131c; --surface:#121823; --line:rgba(255,255,255,.09);
+  --text:#e8eaed; --muted:#9aa3b0; --faint:#6b7382;
+  --accent:#7ec850; --accent2:#ff7a3d;
+  --r:14px; --bd:1px;
+  --maxw:1100px;
+}
+*{margin:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:"Noto Sans SC",system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;-webkit-font-smoothing:antialiased;line-height:1.6;overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 22px}
+.num{font-family:"Archivo Black","Noto Sans SC",sans-serif;font-weight:400;letter-spacing:-.01em}
+
+/* top bar */
+.nav{position:sticky;top:0;z-index:50;background:rgba(11,13,18,.72);backdrop-filter:blur(10px);border-bottom:var(--bd) solid var(--line)}
+.nav .wrap{display:flex;align-items:center;justify-content:space-between;height:60px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700}
+.brand .dot{width:14px;height:14px;border-radius:4px;background:var(--accent);box-shadow:0 0 14px rgba(126,200,80,.6)}
+.brand small{color:var(--faint);font-weight:400;font-size:12px}
+.nav a.gh{font-size:13px;font-weight:700;padding:9px 15px;border:var(--bd) solid var(--line);border-radius:var(--r);transition:transform .15s,background .2s}
+.nav a.gh:hover{background:var(--surface)}
+.nav a.gh:active{transform:scale(.97)}
+
+/* hero */
+.hero{position:relative;min-height:100svh;display:flex;align-items:center;overflow:hidden}
+.hero::before{content:"";position:absolute;inset:0;background:
+  radial-gradient(120% 70% at 82% -10%, rgba(126,200,80,.13), transparent 55%),
+  repeating-linear-gradient(0deg, rgba(255,255,255,.022) 0 1px, transparent 1px 36px),
+  repeating-linear-gradient(90deg, rgba(255,255,255,.022) 0 1px, transparent 1px 36px);
+  pointer-events:none}
+.hero .wrap{position:relative;z-index:1;display:grid;grid-template-columns:1fr;gap:30px;padding-top:90px;padding-bottom:60px}
+.kicker{display:inline-flex;gap:14px;align-items:center;color:var(--muted);font-size:13px;font-weight:700;letter-spacing:.04em;flex-wrap:wrap}
+.kicker .lic{color:var(--accent)}
+.bignum{font-size:clamp(78px,23vw,150px);line-height:.84;letter-spacing:-.04em;margin:14px 0 4px}
+.bignum .u{color:var(--accent);font-size:.4em;letter-spacing:0;margin-left:.08em}
+.lede{max-width:520px;color:#c4cad4;font-size:clamp(15px,2.4vw,18px);line-height:1.7}
+.lede b{color:var(--text);font-weight:700}
+.tags{display:flex;gap:9px;flex-wrap:wrap;margin-top:20px}
+.tag{font-size:12.5px;color:var(--muted);border:var(--bd) solid var(--line);padding:7px 12px;border-radius:var(--r)}
+.cta{display:flex;gap:12px;flex-wrap:wrap;margin-top:28px}
+.btn{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:15px;padding:14px 22px;border-radius:var(--r);transition:transform .15s,filter .2s;cursor:pointer}
+.btn:active{transform:scale(.97)}
+.btn.primary{background:var(--accent);color:#0b0d12}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn.ghost{border:var(--bd) solid var(--line);color:var(--text)}
+.btn.ghost:hover{background:var(--surface)}
+.scrollhint{position:absolute;left:50%;bottom:20px;transform:translateX(-50%);color:var(--faint);font-size:12px;z-index:1}
+
+/* demo video */
+.stage{position:relative;width:100%;margin:6px auto 0;border-radius:16px;overflow:hidden;
+  border:var(--bd) solid rgba(255,255,255,.14);background:#05070a;
+  box-shadow:0 26px 70px -22px rgba(0,0,0,.85),0 0 0 1px rgba(126,200,80,.10)}
+.stage video{display:block;width:100%;aspect-ratio:16/9;object-fit:cover;background:#05070a}
+.stage .badge{position:absolute;top:10px;left:10px;display:inline-flex;align-items:center;gap:7px;
+  font-size:11px;font-weight:700;letter-spacing:.02em;color:#e8eaed;pointer-events:none;
+  background:rgba(5,7,10,.62);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+  border:var(--bd) solid rgba(255,255,255,.16);padding:5px 10px;border-radius:999px}
+.stage .badge i{width:6px;height:6px;border-radius:50%;background:var(--accent2);box-shadow:0 0 8px var(--accent2)}
+.stage .snd{position:absolute;right:10px;bottom:10px;width:34px;height:34px;padding:0;border-radius:10px;
+  display:grid;place-items:center;cursor:pointer;color:#e8eaed;
+  background:rgba(5,7,10,.62);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+  border:var(--bd) solid rgba(255,255,255,.16);transition:background .2s,transform .15s}
+.stage .snd:hover{background:rgba(5,7,10,.88)}
+.stage .snd:active{transform:scale(.94)}
+.stage .snd .x{display:block}
+.stage .snd .w1,.stage .snd .w2{display:none}
+.stage .snd.on .x{display:none}
+.stage .snd.on .w1,.stage .snd.on .w2{display:block}
+.stage .cap{position:absolute;left:12px;bottom:13px;color:rgba(232,234,237,.78);font-size:11.5px;pointer-events:none}
+
+/* sections */
+section.block{padding:84px 0;border-top:var(--bd) solid var(--line)}
+h2{font-size:clamp(26px,4.6vw,40px);font-weight:900;line-height:1.2;margin:10px 0 16px;letter-spacing:-.01em}
+h2 .thin{color:var(--muted);font-weight:700}
+.lead{color:var(--muted);max-width:640px;font-size:16px;line-height:1.8}
+.lead b{color:var(--text)}
+.rule{height:2px;background:linear-gradient(90deg,var(--accent),transparent);transform-origin:left;width:100%;margin:26px 0}
+
+/* tech stats */
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-top:34px}
+.stat{background:var(--surface);border:var(--bd) solid var(--line);border-radius:var(--r);padding:22px}
+.stat .v{font-size:clamp(34px,6vw,52px);line-height:1;color:var(--text)}
+.stat .v .u{font-size:.42em;color:var(--accent);margin-left:4px}
+.stat .k{margin-top:10px;color:var(--muted);font-size:14px}
+
+/* modes */
+.modes{display:grid;grid-template-columns:1fr;gap:14px;margin-top:30px}
+.mode{background:var(--surface);border:var(--bd) solid var(--line);border-radius:var(--r);padding:22px}
+.mode h3{font-size:19px;font-weight:700;display:flex;align-items:center;gap:10px}
+.mode h3 .m{width:12px;height:12px;border-radius:4px;background:var(--accent)}
+.mode p{color:var(--muted);margin-top:8px;font-size:14.5px;line-height:1.7}
+
+/* screenshot gallery */
+.gallery{margin-top:30px}
+.gallery-main{position:relative;border:var(--bd) solid var(--line);border-radius:var(--r);
+  overflow:hidden;aspect-ratio:16/9;background:var(--bg2)}
+.gallery-main img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;
+  transition:opacity .45s ease}
+.gallery-main img.on{opacity:1}
+.gallery-main .gl{position:absolute;left:14px;bottom:12px;font-size:13px;font-weight:700;color:#fff;
+  background:rgba(5,7,10,.62);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+  padding:6px 11px;border-radius:8px;pointer-events:none}
+.gallery-thumbs{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:10px}
+.gallery-thumbs button{position:relative;padding:0;border:var(--bd) solid var(--line);border-radius:10px;
+  overflow:hidden;background:var(--bg2);cursor:pointer;aspect-ratio:16/9;opacity:.5;
+  transition:opacity .2s,border-color .2s,transform .15s}
+.gallery-thumbs button img{display:block;width:100%;height:100%;object-fit:cover}
+.gallery-thumbs button:hover{opacity:.8}
+.gallery-thumbs button.on{opacity:1;border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.gallery-thumbs button:active{transform:scale(.97)}
+
+/* dimensions horizontal scroll */
+.dims{height:360vh;position:relative;border-top:var(--bd) solid var(--line)}
+.dims-sticky{position:sticky;top:0;height:100svh;display:flex;flex-direction:column;justify-content:center;overflow:hidden}
+.dims-head{padding:0 22px;max-width:var(--maxw);margin:0 auto;width:100%}
+.dim-track{display:flex;gap:16px;padding:26px 22px;will-change:transform}
+.dim{flex:0 0 auto;width:74vw;max-width:360px;height:300px;border-radius:var(--r);border:var(--bd) solid rgba(255,255,255,.14);padding:22px;display:flex;flex-direction:column;justify-content:flex-end;position:relative;overflow:hidden;opacity:.45;transition:opacity .3s,transform .3s}
+.dim .dn{font-size:26px;font-weight:900}
+.dim .dt{color:rgba(255,255,255,.86);margin-top:8px;font-size:14.5px;line-height:1.6;max-width:90%}
+.dim.active{opacity:1;transform:scale(1.02)}
+.dim .idx{position:absolute;top:16px;right:18px;font-size:13px;font-weight:700;color:rgba(255,255,255,.7)}
+.dim-progress{height:3px;background:rgba(255,255,255,.1);max-width:var(--maxw);margin:18px auto 0;width:calc(100% - 44px);border-radius:var(--r);overflow:hidden}
+.dim-progress i{display:block;height:100%;width:12.5%;background:var(--accent);border-radius:99px}
+
+/* big numbers */
+.figs{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-top:30px}
+.fig{background:var(--surface);border:var(--bd) solid var(--line);border-radius:var(--r);padding:24px;text-align:center}
+.fig .n{font-size:clamp(40px,8vw,64px);color:var(--accent);line-height:1}
+.fig .l{margin-top:8px;color:var(--muted);font-size:14px}
+.note{margin-top:22px;color:var(--muted);font-size:13.5px;line-height:1.7;background:var(--surface);border:var(--bd) solid var(--line);border-radius:var(--r);padding:16px 18px}
+
+/* dual input */
+.dual{display:grid;grid-template-columns:1fr;gap:14px;margin-top:30px}
+.in{background:var(--surface);border:var(--bd) solid var(--line);border-radius:var(--r);padding:22px}
+.in h3{font-size:17px;font-weight:700;display:flex;align-items:center;gap:9px}
+.in h3 .m{width:12px;height:12px;border-radius:4px;background:var(--accent2)}
+.in ul{list-style:none;margin-top:12px;display:grid;gap:9px}
+.in li{color:var(--muted);font-size:14.5px;display:flex;gap:10px}
+.in li b{color:var(--text);font-weight:700;min-width:74px;display:inline-block}
+
+/* save/eng */
+.cols2{display:grid;grid-template-columns:1fr;gap:14px;margin-top:28px}
+.col{background:var(--surface);border:var(--bd) solid var(--line);border-radius:var(--r);padding:22px}
+.col h3{font-size:17px;font-weight:700}
+.col p{color:var(--muted);margin-top:10px;font-size:14.5px;line-height:1.75}
+.col code{background:var(--bg);border:var(--bd) solid var(--line);border-radius:6px;padding:2px 7px;font-size:13px;color:var(--accent)}
+
+/* footer */
+.foot{border-top:var(--bd) solid var(--line);padding:80px 0 70px;text-align:center;background:radial-gradient(80% 120% at 50% 0%, rgba(126,200,80,.07), transparent 60%)}
+.foot h2{margin-bottom:8px}
+.foot .lead{margin:0 auto}
+.foot .cta{justify-content:center}
+.foot-meta{margin-top:46px;display:flex;gap:26px;align-items:center;justify-content:center;flex-wrap:wrap;color:var(--faint);font-size:13px}
+.foot-meta .dl-qr{background:#fff;padding:9px;border-radius:12px;line-height:0;box-shadow:0 8px 30px -12px rgba(0,0,0,.9)}
+.foot-meta .dl-qr img{display:block;width:116px;height:116px}
+.lic-line{margin-top:30px;color:var(--faint);font-size:12.5px}
+
+/* desktop */
+@media(min-width:900px){
+  .hero .wrap{grid-template-columns:1.15fr .85fr;align-items:center;gap:40px}
+  .stage{margin:0}
+  .stats{grid-template-columns:repeat(4,1fr)}
+  .modes{grid-template-columns:repeat(3,1fr)}
+  .figs{grid-template-columns:repeat(4,1fr)}
+  .dual{grid-template-columns:1fr 1fr}
+  .cols2{grid-template-columns:1fr 1fr}
+  .dim{width:360px}
+}
+@media(max-width:899px){
+  .nav a.gh span.full{display:none}
+  .stage{margin-top:14px}
+}
+@media(max-width:640px){
+  .gallery-thumbs{grid-template-columns:repeat(3,1fr);gap:8px}
+  .stage .cap{display:none}
+}
+/* 窄屏顶栏：品牌副标题和「查看」都塞不下，一起收掉，避免两处换行 */
+@media(max-width:520px){
+  .brand small{display:none}
+  .brand{gap:8px;font-size:15px;white-space:nowrap}
+  .nav a.gh{white-space:nowrap}
+}
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap">
+    <div class="brand"><span class="dot"></span>voxel-craft <small>yezihack / voxel-craft</small></div>
+    <a class="gh" href="https://github.com/yezihack/voxel-craft" target="_blank" rel="noopener">在 GitHub <span class="full">查看</span></a>
+  </div>
+</header>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="wrap">
+    <div>
+      <div class="kicker"><span class="lic">MIT 开源</span><span>纯手写 WebGL</span><span>零运行时依赖</span></div>
+      <div class="bignum num"><span id="bignum">126</span><span class="u">KB</span></div>
+      <p class="lede">一个能玩的 <b>3D 体素沙盒</b>。从顶点缓冲、着色器、区块网格到光影后处理，全部手写，没有 Three.js，没有 Babylon，没有游戏引擎。</p>
+      <div class="tags">
+        <span class="tag">无 Three.js</span>
+        <span class="tag">无 Babylon</span>
+        <span class="tag">无游戏引擎</span>
+        <span class="tag">离线可玩</span>
+      </div>
+      <div class="cta">
+        <a class="btn primary" href="https://voxel-craft-516.pages.dev/" target="_blank" rel="noopener">在线试玩</a>
+        <a class="btn ghost" href="https://github.com/yezihack/voxel-craft" target="_blank" rel="noopener">去 GitHub Star</a>
+      </div>
+    </div>
+    <div class="stage">
+      <video id="demoVid" playsinline muted loop preload="none"
+             poster="/media/demo-poster.webp"
+             aria-label="voxel-craft 实机演示录屏">
+        <source src="/media/demo.mp4" type="video/mp4">
+        <source src="/media/demo.webm" type="video/webm">
+      </video>
+      <div class="badge"><i></i>实机演示 · 50 秒</div>
+      <div class="cap">实机录制 · 未加特效</div>
+      <button class="snd" id="sndBtn" type="button" aria-label="开启声音" aria-pressed="false">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M11 5 6 9H3v6h3l5 4z"/>
+          <path class="w1" d="M16 9.5a3.5 3.5 0 0 1 0 5"/>
+          <path class="w2" d="M19 6.5a8 8 0 0 1 0 11"/>
+          <path class="x" d="M16.5 9.5l5 5M21.5 9.5l-5 5"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="scrollhint">向下滚动</div>
+</section>
+
+<!-- WHAT -->
+<section class="block">
+  <div class="wrap">
+    <h2>没有引擎，<span class="thin">也跑得起来</span></h2>
+    <p class="lead reveal">市面上的 3D 网页游戏大多站在 Three.js、Babylon 或一整套引擎肩上。voxel-craft 不。它从底层开始自己写：顶点缓冲、VAO、uniform 布局、区块网格、面剔除、顶点 AO，再到泛光与 FXAA 后处理链，<b>全是手写</b>。Vue 3 只负责 UI 层，<b>运行时依赖只有 vue</b>。</p>
+    <div class="rule reveal"></div>
+    <p class="lead reveal">贴图也程序化生成——一张 512×512 图集打包全部材质，运行时零图片请求，<b>断网也能玩</b>。</p>
+  </div>
+</section>
+
+<!-- TECH STATS -->
+<section class="block">
+  <div class="wrap">
+    <h2>小到能塞进<span class="thin">一张贴图</span></h2>
+    <div class="stats">
+      <div class="stat reveal"><div class="v num">126<span class="u">KB</span></div><div class="k">生产构建 gzip 后总体积（JS + CSS）</div></div>
+      <div class="stat reveal"><div class="v num">0</div><div class="k">运行时依赖，仅 vue 一个</div></div>
+      <div class="stat reveal"><div class="v num">离线</div><div class="k">程序化贴图，无图片资源文件</div></div>
+      <div class="stat reveal"><div class="v num">降级</div><div class="k">WebGL 2 自动降级到 WebGL 1</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- GAMEPLAY -->
+<section class="block">
+  <div class="wrap">
+    <h2>三种模式，<span class="thin">一套规则</span></h2>
+    <div class="modes">
+      <div class="mode reveal"><h3><span class="m"></span>创造</h3><p>无限方块库，飞行，瞬破。想怎么搭就怎么搭。</p></div>
+      <div class="mode reveal"><h3><span class="m"></span>生存</h3><p>生命 / 饥饿 / 氧气，挖掘耗时，合成台，护甲减伤。活下去才有意思。</p></div>
+      <div class="mode reveal"><h3><span class="m"></span>旁观</h3><p>穿墙观察，不参与世界交互，纯粹看这个世界怎么运转。</p></div>
+    </div>
+
+    <div class="gallery" id="gallery">
+      <div class="gallery-main">
+        <img class="on" src="/media/shot-survival.webp" alt="生存模式：主世界湖泊与丘陵的实机画面">
+        <img src="/media/shot-creative.webp" alt="创造模式：高空俯瞰地形的实机画面">
+        <img src="/media/shot-library.webp" alt="方块库与物品栏面板的实机画面">
+        <img src="/media/shot-lava.webp" alt="熔火深渊维度岩浆海的实机画面">
+        <img src="/media/shot-mobile.webp" alt="手机竖屏触屏操作界面的实机画面">
+        <div class="gl" id="galLabel">生存模式 · 主世界湖泊</div>
+      </div>
+      <div class="gallery-thumbs" id="galThumbs">
+        <button type="button" class="on" aria-label="生存模式 · 主世界湖泊"><img src="/media/shot-survival.webp" alt=""></button>
+        <button type="button" aria-label="创造模式 · 高空俯瞰"><img src="/media/shot-creative.webp" alt=""></button>
+        <button type="button" aria-label="方块库 · 物品栏"><img src="/media/shot-library.webp" alt=""></button>
+        <button type="button" aria-label="熔火深渊 · 岩浆海"><img src="/media/shot-lava.webp" alt=""></button>
+        <button type="button" aria-label="手机竖屏 · 触屏操作"><img src="/media/shot-mobile.webp" alt=""></button>
+      </div>
+    </div>
+
+    <h2 style="margin-top:64px">八个维度，<span class="thin">八个世界</span></h2>
+    <p class="lead reveal">换维度 = 换一整套参数：地形形态、方块配色、天空、雾、环境光、重力、刷怪池、致死高度。用维度核心点燃黑曜石门框，就能传送。</p>
+  </div>
+</section>
+
+<!-- DIMENSIONS HORIZONTAL SCROLL -->
+<section class="dims" id="dims">
+  <div class="dims-sticky">
+    <div class="dims-head">
+      <h2 style="margin-top:8px">八个维度</h2>
+    </div>
+    <div class="dim-track" id="dimTrack">
+      <div class="dim" style="background:#3f7a35"><span class="idx">01</span><div class="dn">主世界</div><div class="dt">草原与丘陵，温和的出生地。</div></div>
+      <div class="dim" style="background:#a83a1f"><span class="idx">02</span><div class="dn">熔火深渊</div><div class="dt">岩浆奔流，泛光真的在发光。</div></div>
+      <div class="dim" style="background:#2f5fa8"><span class="idx">03</span><div class="dn">虚空群岛</div><div class="dt">浮空地块，坠落即清零。</div></div>
+      <div class="dim" style="background:#2f7e8c"><span class="idx">04</span><div class="dn">霜寂永夜</div><div class="dt">永夜与冰雪，缺氧又寒冷。</div></div>
+      <div class="dim" style="background:#6a3fa0"><span class="idx">05</span><div class="dn">晶簇洞天</div><div class="dt">水晶洞穴，冷紫配色。</div></div>
+      <div class="dim" style="background:#8a2f63"><span class="idx">06</span><div class="dn">腐化沼泽</div><div class="dt">毒雾与菌林，刷怪凶险。</div></div>
+      <div class="dim" style="background:#a8701f"><span class="idx">07</span><div class="dn">炙沙之境</div><div class="dt">沙漠神殿，烈日与缺水。</div></div>
+      <div class="dim" style="background:#b85a86"><span class="idx">08</span><div class="dn">天空花园</div><div class="dt">浮空花园，柔和的收尾。</div></div>
+    </div>
+    <div class="dim-progress"><i id="dimBar"></i></div>
+  </div>
+</section>
+
+<!-- FIGURES -->
+<section class="block">
+  <div class="wrap">
+    <h2>数字说话</h2>
+    <div class="figs">
+      <div class="fig reveal"><div class="n num">84</div><div class="l">种方块</div></div>
+      <div class="fig reveal"><div class="n num">87</div><div class="l">种物品</div></div>
+      <div class="fig reveal"><div class="n num">19</div><div class="l">生物 + 3 Boss</div></div>
+      <div class="fig reveal"><div class="n num">25</div><div class="l">同屏 AI 玩家</div></div>
+    </div>
+    <div class="note reveal">AI 玩家不是布景：会找矿脉、砍树、合成到铁级、盖 4×4 的房子，看见敌对生物就上，血少了回家上药；被打死会掉出背包里的东西。</div>
+  </div>
+</section>
+
+<!-- DUAL INPUT -->
+<section class="block">
+  <div class="wrap">
+    <h2>手机也能玩</h2>
+    <div class="dual">
+      <div class="in reveal">
+        <h3><span class="m"></span>桌面 · 键盘鼠标</h3>
+        <ul>
+          <li><b>WASD</b> 移动</li>
+          <li><b>鼠标左/右</b> 挖掘 / 放置·进食·格挡</li>
+          <li><b>E</b> 背包 / 合成台</li>
+          <li><b>F5 / F9</b> 保存 / 读取</li>
+          <li><b>空格 / Shift</b> 跳跃 / 疾跑·飞行</li>
+        </ul>
+      </div>
+      <div class="in reveal">
+        <h3><span class="m"></span>触屏 · 手机</h3>
+        <ul>
+          <li><b>左摇杆</b> 移动</li>
+          <li><b>滑动</b> 任意位置转视角</li>
+          <li><b>右二键</b> 挖掘 / 放置（按住生效）</li>
+          <li><b>右上</b> 背包 / 模式 / 飞行 / 菜单</li>
+          <li><b>设计</b> 挖放用专用按钮，不复用画布手势</li>
+        </ul>
+      </div>
+    </div>
+    <p class="lead reveal" style="margin-top:22px">电容屏分不清「手指停顿」和「长按」，所以挖掘与放置做成两个独立按钮——否则想转个视角就会在脚下挖出一个坑。</p>
+  </div>
+</section>
+
+<!-- SAVE & ENGINEERING -->
+<section class="block">
+  <div class="wrap">
+    <h2>存档与工程</h2>
+    <div class="cols2">
+      <div class="col reveal">
+        <h3>本地存档</h3>
+        <p><code>F5</code> 保存 / <code>F9</code> 读取，每 60 秒自动存一次。地形是 <b>纯函数</b>，所以地形本身零字节入档——只存「世界参数 + 8 维度改动覆盖层 + 玩家状态」，只有你真正动过的方块才占空间。</p>
+      </div>
+      <div class="col reveal">
+        <h3>能无头测试</h3>
+        <p><code>src/game/</code> 完全不依赖 Vue 组件，可在 Node 里直接 import 跑断言。每个功能一个 <code>.scratch/</code> 工单加 <code>probe.mjs</code> 冒烟测试，不需要浏览器也能验证内核。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer class="foot">
+  <div class="wrap">
+    <h2>点个 Star，<span class="thin">或者先玩一局</span></h2>
+    <p class="lead">开源、免费、MIT。浏览器直接打开就能玩，键盘鼠标和手机触屏都行。</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/yezihack/voxel-craft" target="_blank" rel="noopener">去 GitHub Star</a>
+      <a class="btn ghost" href="https://voxel-craft-516.pages.dev/" target="_blank" rel="noopener">在线试玩</a>
+    </div>
+    <div class="foot-meta">
+      <div class="dl-qr"><img src="/media/qr.svg" width="116" height="116" alt="扫码在线试玩 voxel-craft"></div>
+      <div style="text-align:left;line-height:1.7">
+        <b>扫码直接开玩</b><br>
+        仓库：github.com/yezihack/voxel-craft<br>
+        在线试玩：voxel-craft-516.pages.dev<br>
+        许可证：MIT
+      </div>
+    </div>
+    <div class="lic-line">voxel-craft · 作者 yezihack · 纯手写 WebGL 体素沙盒</div>
+  </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+<script>
+if (window.gsap && window.ScrollTrigger){
+  document.documentElement.classList.add('gsap-on');
+  gsap.registerPlugin(ScrollTrigger);
+
+  // hero: count up 126 + video card entrance
+  const bn=document.getElementById('bignum');
+  const c={v:0};
+  gsap.to(c,{v:126,duration:1.1,ease:"power2.out",onUpdate:()=>{bn.textContent=Math.round(c.v);}});
+  gsap.from('.stage',{y:22,scale:.95,opacity:0,duration:.9,ease:"power2.out",delay:.15});
+
+  // section entrances — varied methods, each used at most twice
+  gsap.from('.stats',{opacity:0,scale:.94,duration:.6,ease:"power2.out",scrollTrigger:{trigger:'.stats',start:"top 85%"}});
+  gsap.from('.figs',{opacity:0,scale:.94,duration:.6,ease:"power2.out",scrollTrigger:{trigger:'.figs',start:"top 85%"}});
+  gsap.from('.modes',{opacity:0,y:28,duration:.6,ease:"power2.out",scrollTrigger:{trigger:'.modes',start:"top 85%"}});
+  gsap.from('.dual',{opacity:0,y:28,duration:.6,ease:"power2.out",scrollTrigger:{trigger:'.dual',start:"top 85%"}});
+  gsap.from('.cols2',{opacity:0,x:-26,duration:.6,ease:"power2.out",scrollTrigger:{trigger:'.cols2',start:"top 85%"}});
+  gsap.from('.gallery',{opacity:0,y:26,duration:.6,ease:"power2.out",scrollTrigger:{trigger:'.gallery',start:"top 85%"}});
+  gsap.from('.rule',{scaleX:0,transformOrigin:"left center",duration:.8,ease:"power2.out",scrollTrigger:{trigger:'.rule',start:"top 88%"}});
+
+  // dimensions horizontal scroll (the continuous scroll-change section)
+  const track=document.getElementById('dimTrack');
+  const dims=gsap.utils.toArray('.dim');
+  const bar=document.getElementById('dimBar');
+  const dimSec=document.getElementById('dims');
+  ScrollTrigger.create({
+    trigger:dimSec,start:"top top",end:"bottom bottom",scrub:1,
+    onUpdate:self=>{
+      const p=self.progress;
+      const x=-(track.scrollWidth - track.clientWidth);
+      gsap.set(track,{x:x*p});
+      bar.style.width=(12.5+87.5*p)+'%';
+      const idx=Math.min(dims.length-1,Math.floor(p*dims.length));
+      dims.forEach((d,i)=>d.classList.toggle('active',i===idx));
+    }
+  });
+}
+</script>
+<script>
+/* 实机演示：进入视口才拉流并播放（省流量），静音循环，右下角切声音 */
+(function(){
+  var v = document.getElementById('demoVid');
+  if (v){
+    var snd = document.getElementById('sndBtn');
+    var tryPlay = function(){
+      var p = v.play();
+      if (p && p.catch) p.catch(function(){ /* 自动播放被拒：停在海报帧，不报错 */ });
+    };
+    if ('IntersectionObserver' in window){
+      new IntersectionObserver(function(es){
+        es.forEach(function(e){ e.isIntersecting ? tryPlay() : v.pause(); });
+      }, { threshold: 0.35 }).observe(v);
+    } else { tryPlay(); }
+
+    if (snd){
+      snd.addEventListener('click', function(){
+        v.muted = !v.muted;
+        snd.classList.toggle('on', !v.muted);
+        snd.setAttribute('aria-pressed', String(!v.muted));
+        snd.setAttribute('aria-label', v.muted ? '开启声音' : '关闭声音');
+        if (!v.muted) tryPlay();
+      });
+    }
+  }
+
+  /* 截图图集：缩略图切换主图 */
+  var gal = document.getElementById('gallery');
+  if (gal){
+    var imgs = gal.querySelectorAll('.gallery-main img');
+    var btns = gal.querySelectorAll('.gallery-thumbs button');
+    var label = document.getElementById('galLabel');
+    var show = function(i){
+      for (var k = 0; k < imgs.length; k++){
+        imgs[k].classList.toggle('on', k === i);
+        btns[k].classList.toggle('on', k === i);
+      }
+      if (label) label.textContent = btns[i].getAttribute('aria-label');
+    };
+    for (var i = 0; i < btns.length; i++){
+      (function(idx){ btns[idx].addEventListener('click', function(){ show(idx); }); })(i);
+    }
+  }
+})();
+</script>
+</body>
+</html>

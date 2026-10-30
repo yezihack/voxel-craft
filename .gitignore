@@ -6,6 +6,12 @@ dist-ssr
 # 截图产物：由 .scratch/mobile/shot.mjs 随时重新生成，别把几 MB 的 PNG 塞进仓库
 .scratch/**/*.png
 
+# 录屏中间产物：raw/ 里的 WebM、母版 MP4、帧抽图都是可重跑生成的，
+# 真正要进仓库的成品只有 public/media/ 下那几份。
+.scratch/**/*.webm
+.scratch/**/*.mp4
+.scratch/**/*.webp
+
 # 命令输出日志：wrangler 的 login/whoami 日志里带账号邮箱，不能进公开仓库
 .scratch/**/*.log
 
