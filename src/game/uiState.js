@@ -25,6 +25,14 @@ export const ui = reactive({
   bagOpen: false,
   bagExpanded: false,          // 储物区展开全部 5 排
 
+  /* ---- 附魔台 ----
+   * enchantOpen   : 台面是否打开（和 bagOpen 互斥，见 uiActions 的 openEnchant）
+   * enchantTarget : 当前摆在台面上的装备 id（0 = 还没放东西）
+   * 词条等级本身**不放这里** —— 它属于世界状态（存档要存），住在 enchant.js
+   * 的 ench 里；这里只放「界面此刻在看什么」，和 selected / bagExpanded 同一层级。 */
+  enchantOpen: false,
+  enchantTarget: 0,
+
   /* ---- 世界 ---- */
   worldFlat: false,            // 世界类型：false = 经典起伏，true = 超平坦
 

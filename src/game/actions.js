@@ -20,6 +20,29 @@ import { axisFromYaw, clearBelt, clearPad, registerPad, setBeltDir, tryBlink } f
 /* 基岩（世界底层的黑曜石）不可破坏 */
 export const isBedrock = (hit) => hit.id === I.OBSIDIAN && hit.y === 0;
 
+/* ---------------- 右键开附魔台 ----------------
+ * 「开台」的落地动作（暂停 / 退出指针锁 / 切 ui 状态）住在 uiActions.js，
+ * 但本模块被 uiActions 引用，反向 import 会成环（uiActions → actions → uiActions）。
+ * 所以照 readHeldId / setMobTypes 的老套路走依赖注入：这里只留一个钩子，
+ * 由 uiActions.js 在模块体里装上去。 */
+export let onOpenEnchant = () => {};
+export function setOpenEnchantHook(fn) { onOpenEnchant = fn; }
+
+/* 准星指着附魔台 → 这次右键是「开台面」，不是「往它上面贴一块方块」。
+ * 和 MC 同一套语义：对着台子按右键永远先开台。
+ *
+ * 代价是「不能在台面正上方垒方块」，收益是「想开台却贴了块砖」这件
+ * 天天会发生的事不会发生 —— 后者更常见，所以选前者。
+ * 想垒的话站到台子上放，或者先把台子挪一格。
+ *
+ * 必须放在 doPlace 的 heldId() 之前：空手也得能开台。 */
+export function tryOpenEnchant() {
+  const hit = raycast(REACH);
+  if (!hit || hit.id !== I.ENCHANT) return false;
+  onOpenEnchant(hit);
+  return true;
+}
+
 /* 破坏一个方块的共同收尾：清空、音效、粒子。生存模式再补上掉落进背包。 */
 export function breakBlock(hit, withDrop) {
   const id = hit.id;
@@ -58,6 +81,9 @@ export function doBreakTimed(hit) {
 export function doPlace() {
   if (!running) return;
   if (mode === MODE.SPECTATOR) return;      // 旁观者碰不到方块
+  /* 先判「是不是在对着附魔台右键」：是就开台并吞掉这次右键。
+   * 这一步必须在 heldId() 之前 —— 空手也要能开台。 */
+  if (tryOpenEnchant()) return;
   const id = heldId();
   if (!id) return;
 

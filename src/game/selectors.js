@@ -7,6 +7,7 @@
  * mode / selected —— 后者是给引擎读的普通模块变量，改了不会触发重渲染。 */
 import { BLOCKS, HOTBAR, ITEMS, ARMOR_OF, ARMOR_PARTS, ARMOR_PART_NAME, defName } from './config.js'
 import { armorAt, armorPoints, armorReduction } from './armor.js'
+import { enchantCount, enchantOffers, enchantSummary, isEnchantable } from './enchant.js'
 import { HOTBAR_N, SLOT_N, STORE_N, invCount, invSlots, pruneSlots } from './survival.js'
 import { MODE } from './state.js'
 import { ui } from './uiState.js'
@@ -95,4 +96,57 @@ export function armorSummary() {
   const pts = armorPoints()
   const red = armorReduction()
   return { pts, red, pct: Math.round(red * 100) }
+}
+
+/* ---------------- 附魔台 ----------------
+ * 可上台的装备列表。
+ *   生存模式：只列背包里**真有的**（同一 id 只出现一次，数量单独显示）——
+ *             列一堆自己没有的装备，点上去也刻不了，纯属噪声。
+ *   创造模式：列全部可附魔物品。那边没有背包账，按「有的」列等于什么都不列。
+ *
+ * ⚠ 用 Set 去重是必要的：invSlots 里同一个 id 只会占一格（见 survival.js），
+ *   但快捷栏 / 储物格对调的历史残留可能留下重复，去重后界面永远只出一行。 */
+export function enchantTargetsView() {
+  const surv = isSurvival()
+  const ids = surv
+    ? [...new Set(invSlots.filter((id) => id && isEnchantable(id)))]
+    : allItemIds().filter((id) => isEnchantable(id))
+  const cur = ui.enchantTarget | 0
+  return ids.map((id) => ({
+    id,
+    name: defName(id),
+    count: surv ? invCount(id) : 0,
+    on: id === cur,
+    n: enchantCount(id),
+    summary: enchantSummary(id),
+  }))
+}
+
+/* 台面上那件装备的词条一览。
+ * 每一项都带 `can`（现在能不能刻）与逐项材料状态 —— 界面据此把按钮置灰、
+ * 把缺的材料标红，玩家不用自己心算。 */
+export function enchantOffersView() {
+  const id = ui.enchantTarget | 0
+  if (!id) return []
+  const list = enchantOffers(id)
+  if (!list) return []
+  const surv = isSurvival()
+  return list.map((o) => {
+    const cost = o.cost.map((c) => {
+      const have = surv ? invCount(c.id) : c.n
+      return { id: c.id, n: c.n, name: defName(c.id), have, ok: have >= c.n }
+    })
+    return {
+      ...o,
+      cost,
+      can: !o.maxed && cost.every((c) => c.ok),
+    }
+  })
+}
+
+/* 台面标题栏：摆着哪件、已经刻了什么 */
+export function enchantTargetView() {
+  const id = ui.enchantTarget | 0
+  if (!id) return null
+  return { id, name: defName(id), summary: enchantSummary(id), n: enchantCount(id) }
 }

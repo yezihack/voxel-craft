@@ -6,6 +6,7 @@ import BowBar from './components/BowBar.vue'
 import Crosshair from './components/Crosshair.vue'
 import DeathScreen from './components/DeathScreen.vue'
 import DigRing from './components/DigRing.vue'
+import EnchantPanel from './components/EnchantPanel.vue'
 import FatalNotice from './components/FatalNotice.vue'
 import GameCanvas from './components/GameCanvas.vue'
 import HotBar from './components/HotBar.vue'
@@ -78,6 +79,7 @@ onMounted(async () => {
   <Vitals />
   <HotBar />
   <BagPanel />
+  <EnchantPanel />
   <DeathScreen />
   <Toast />
   <TouchControls />

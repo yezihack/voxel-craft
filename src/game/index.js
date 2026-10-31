@@ -17,9 +17,10 @@ export { setTagHook, ui } from './uiState.js'
 
 /* 界面动作 */
 export {
-  clearCraftAll, clearCraftSlot, clickInvSlot, closeBag, cycleMode, equipArmorItem,
-  exportSave, importSaveFile, loadNow, newWorld, pauseGame, pickLibraryItem, pickMode,
-  pickRecipe, pickWorldType, respawnAndStart, saveNow, saveStatus, selectSlot,
+  clearCraftAll, clearCraftSlot, clickInvSlot, closeBag, closeEnchant, cycleMode,
+  enchantInscribe, enchantPickItem, equipArmorItem,
+  exportSave, importSaveFile, loadNow, newWorld, openEnchant, pauseGame, pickLibraryItem,
+  pickMode, pickRecipe, pickWorldType, respawnAndStart, saveNow, saveStatus, selectSlot,
   setInputKey, setLook, setStick, startGame, takeCraftResult, toggleBag, toggleBagExpand,
   toggleFly, touchMine, touchPlace, unequipArmorSlot,
 } from './uiActions.js'
@@ -27,6 +28,7 @@ export {
 /* 派生数据 */
 export {
   allItemIds, allPlaceableIds, armorSlotsView, armorSummary, bagSubtitle,
+  enchantOffersView, enchantTargetView, enchantTargetsView,
   hotbarSlots, invSlotsView, totalStore, usedStore,
 } from './selectors.js'
 
@@ -34,5 +36,10 @@ export {
 export { HOTBAR_N, heldId } from './survival.js'
 export { craftResult, craftSlots, recipeBookEntries, recipeMissing } from './crafting.js'
 export { defName, itemTip, isArmorItem, isShieldItem, isStaffItem } from './config.js'
+/* 附魔：ENCH 是词条表（面板要拿名字/上限），isEnchantable 给物品提示用。
+ * ⚠ 这两个导出同时是「enchant.js 一定会被求值」的保证之一 ——
+ *   它没被求值的话，config.js 里的 enchantLevel 注入就不生效，
+ *   所有词条会静默失效（面板能刻、数值不变）。别删。 */
+export { ENCH, enchantSummary, isEnchantable } from './enchant.js'
 export { isoIcon } from './textures.js'
 export { MODE } from './state.js'

@@ -3,7 +3,8 @@ import { reactive } from 'vue'
 /* 生存模式：背包 Map、挖掘计时、饥饿 / 氧气 / 摔落伤害 —— 迁移自 voxel-craft.html 第 5653-5919 行 */
 
 import { BLOCKS, EYE, HOTBAR, I, ITEMS, PW, SHIELD_OF, breakTime, dropCountOf, dropOf, setHeldIdReader } from './config.js'
-import { armorReduction } from './armor.js'
+import { armorAt, armorReduction } from './armor.js'
+import { enchantLevel } from './enchant.js'
 import { getEffective } from './generate.js'
 import { input } from './input.js'
 import { clamp } from './math.js'
@@ -125,7 +126,9 @@ export function hurt(n, reason, opts) {
      * 这正是「终局装备」该有的手感，而 1 点下限保证它仍然是「会疼」。 */
     if (p.blocking) {
       const s = SHIELD_OF[heldId()];
-      if (s) cut *= (1 - s.block);
+      /* 坚守词条：每级 +8% 格挡比例，封顶 90% —— 留 10% 是为了保住
+       * 「盾是减伤不是免伤」这条底线（和护甲 72% 顶同一个理由）。 */
+      if (s) cut *= (1 - Math.min(0.90, s.block + 0.08 * enchantLevel(heldId(), 'bulwark')));
     }
     if (cut < n) n = Math.max(1, Math.round(cut));
   }
@@ -172,12 +175,20 @@ export function tryEat(id) {
 
 /* --- 掉落 --- */
 /* 破坏方块后进背包。bonus 是概率掉落（树叶掉苹果）。
- * roll 参数是为了让测试能确定性地驱动概率分支。 */
+ * roll 参数是为了让测试能确定性地驱动概率分支。
+ *
+ * 幸运词条在这里生效：每级 30% 概率**额外掉一整份**（不是 +1 个 ——
+ * 胡萝卜丛 dropN=2，只加 1 个的话「幸运」看起来像没生效）。
+ * 判定用同一支 roll，测试里传 () => 0 就能稳定命中。 */
 export function collectDrop(id, roll = Math.random) {
   const B = BLOCKS[id];
   if (!B) return 0;
   const got = dropOf(id);
-  if (got) invAdd(got, dropCountOf(id));
+  if (got) {
+    invAdd(got, dropCountOf(id));
+    const lv = enchantLevel(heldId(), 'fortune');
+    if (lv && roll() < 0.30 * lv) invAdd(got, dropCountOf(id));
+  }
   if (B.bonus && roll() < B.bonus.p) invAdd(B.bonus.id, B.bonus.n || 1);
   return got;
 }
@@ -193,7 +204,11 @@ export function updateSurvival(dt, input) {
   else if (p.onGround) {
     if (p.fallPeak !== null) {
       const d = p.fallPeak - p.y;
-      if (d > SURV.fallSafe) hurt(Math.min(20, Math.floor(d - SURV.fallSafe) + 1), '你摔死了', { pierce: true });
+      /* 轻羽词条（刻在靴子上）：每级把「安全落高」抬高 1.2 格。
+       * 注意加的是**阈值**而不是减伤 —— 直接减伤会让「从 40 格摔下来」
+       * 变成「扣得少一点但还是必死」，而轻羽该给的是「这段高度不算数」。 */
+      const safe = SURV.fallSafe + 1.2 * enchantLevel(armorAt('feet'), 'feather');
+      if (d > safe) hurt(Math.min(20, Math.floor(d - safe) + 1), '你摔死了', { pierce: true });
       p.fallPeak = null;
     }
   } else if (p.fallPeak === null) p.fallPeak = p.y;

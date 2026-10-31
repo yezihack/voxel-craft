@@ -18,6 +18,19 @@ import { selected } from './state.js'
 export let readHeldId = () => HOTBAR[selected] | 0;
 export function setHeldIdReader(fn) { readHeldId = fn; }
 
+/* 附魔词条的等级读取器。同样是**依赖注入**，理由和 readHeldId 一样：
+ * enchant.js 要 import 本模块（取 TOOL_OF / ARMOR_OF / 方块 id），
+ * 本模块的 attackDamage / toolSpeedOn 又要读词条等级 —— 直接 import 就是环。
+ * 默认恒 0（= 没有附魔），enchant.js 在文件末尾把自己装进来。
+ * ⚠ 若 enchant.js 从未被求值（import 图被改动），词条会静默失效 ——
+ *   表现是「面板上刻了词条、数值一点没变」，非常难查。 */
+export let enchantLevel = () => 0;
+export function setEnchantReader(fn) { enchantLevel = fn; }
+/* 物品提示里那句「已铭刻：锋利 II」也要读词条表，但那张表在 enchant.js ——
+ * 同样是反向边，同样走注入。默认空串 = 没有铭刻。 */
+export let enchantSummaryOf = () => '';
+export function setEnchantSummaryReader(fn) { enchantSummaryOf = fn; }
+
 /* 生物档案表。定义在 mobs.js（第 6301 行那段），而 mobs.js 的顶层要读本模块的
  * SUMMON_OF / EGG_OF / JUMP_V —— 所以这里同样只能「被注入」，不能反向 import。
  * 只有 itemTip() 会用到它，而 itemTip 是界面渲染时调的，那时引擎早已就绪。 */
@@ -229,6 +242,22 @@ BLOCKS.push(
     hard:.60, light:1, solid:false, cutout:true, shape:'plate', pad:1, tex:'pad' },
 );
 
+/* ---------------- 附魔台 ----------------
+ * 整立方实体，右键打开台面（见 actions.js 的 tryOpenEnchant）。
+ *
+ * 为什么不复用「火把 / 铁轨」那种 shape 薄片：附魔台要能被站在旁边操作、
+ * 要挡路、要能往上垒东西（虽然右键优先开台），做成整立方最省事也最像「家具」。
+ *
+ * light:1 是有意的：附魔台在洞里也是一盏弱光，玩家远远就能认出「这里有个台子」，
+ * 不然黑曜石底色的方块在洞穴里和黑曜石/玄武岩几乎分不开。
+ *
+ * ⚠ 一律追加在表尾。往 BLOCKS 中间插方块会顶掉后面所有 id，
+ *   而地形生成 / 存档 / 配方里都还留着一批裸数字。 */
+BLOCKS.push(
+  { name:'附魔台', n:'附', top:[ 92, 74,150], side:[ 46, 40, 62], bot:[ 34, 28, 48],
+    hard:2.40, light:1, tex:{ top:'enchant_top', side:'enchant_side', bot:'obsidian' } },
+);
+
 export const SOLID = {};                    // id → 是否实体
 /* 传送门不参与碰撞（portal:true）—— 不然玩家会站在自己的门板上，走不进另一个维度。
  * solid:false 同理（火把/铁轨/传送板是贴在地面上的薄片，不该挡路）。
@@ -410,6 +439,8 @@ export const I = {
   /* 机制方块（光源 / 红石 / 轨道 / 运输） */
   TORCH: ID['火把'], TORCH_RED: ID['红石火把'], REDSTONE_BLOCK: ID['红石块'],
   RAIL: ID['铁轨'], RAIL_POWERED: ID['充能铁轨'], BELT: ID['传送带'], PAD: ID['传送板'],
+  /* 附魔台：右键开台面，词条表见 enchant.js */
+  ENCHANT: ID['附魔台'],
 };
 /* 名字写错会静默拿到 undefined —— 早失败早发现 */
 for (const k in I) if (I[k] === undefined) throw new Error('方块别名未定义: ' + k);
@@ -764,7 +795,7 @@ export const BLOCK_MAT = {};
 {
   const put = (mat, ids) => { for (const id of ids) if (id) BLOCK_MAT[id] = mat; };
   put('stone', [I.STONE, I.COBBLE, I.STONEBRICK, I.MOSS, I.OBSIDIAN, I.QUARTZ, I.BRICK,
-                I.SANDSTONE, I.GLASS, I.ICE,
+                I.SANDSTONE, I.GLASS, I.ICE, I.ENCHANT,
                 I.COAL, I.IRON, I.GOLD, I.DIAMOND, I.REDSTONE]);
   put('wood',  [I.LOG, I.PLANK, I.DARKPLANK, I.BOOKSHELF, I.LEAF, I.PUMPKIN, I.LAMP]);
   put('dirt',  [I.GRASS, I.DIRT, I.SAND, I.SNOW, I.CLAY, I.CARROT]);
@@ -772,30 +803,51 @@ export const BLOCK_MAT = {};
 /* 反查：工具类别 → 它对口的材质。剑不在表里 —— 剑不加速挖掘。 */
 export const TOOL_GOOD = { pick: 'stone', axe: 'wood', shovel: 'dirt' };
 
-/* 手持工具挖某个方块的倍率。1 = 不加速（空手 / 剑 / 用错工具）。 */
+/* 手持工具挖某个方块的倍率。1 = 不加速（空手 / 剑 / 用错工具）。
+ *
+ * 效率词条走**乘算**（见 enchant.js 的 desc）：钻石镐 ×8 配效率 III 是 ×20，
+ * 而星陨镐 ×16 配效率 III 是 ×40 —— 加算的话好工具上刻词条几乎看不出差别，
+ * 「越好的装备越值得刻」这条动机就断了。 */
 export function toolSpeedOn(id) {
-  const t = TOOL_OF[readHeldId()];
+  const held = readHeldId();
+  const t = TOOL_OF[held];
   if (!t) return 1;
-  return BLOCK_MAT[id] === TOOL_GOOD[t.kind] ? TIER_SPEED[t.tier] : 1;
+  if (BLOCK_MAT[id] !== TOOL_GOOD[t.kind]) return 1;
+  const eff = enchantLevel(held, 'eff');
+  return TIER_SPEED[t.tier] * (1 + 0.5 * eff);
 }
-/* 当前手持物的攻击伤害 */
+/* 当前手持物的攻击伤害。
+ * 锋利只对剑 / 斧生效 —— 判定交给 enchant.js 的 fits，这里只按等级加数值；
+ * 就算存档被手改成「镐上有锋利」，fits 会在恢复时把它剔掉（见 enchantRestore）。 */
 export function attackDamage() {
-  const t = TOOL_OF[readHeldId()];
-  return t ? TIER_DMG[t.tier] + KIND_DMG[t.kind] : FIST_DMG;
+  const held = readHeldId();
+  const t = TOOL_OF[held];
+  const base = t ? TIER_DMG[t.tier] + KIND_DMG[t.kind] : FIST_DMG;
+  return base + enchantLevel(held, 'sharp');
 }
 /* 物品栏提示文案：工具显示「挖掘倍率 / 伤害」，食物显示回复量 */
 export function itemTip(id) {
   const d = ITEMS[id];
   if (!d) return '';
+  /* 已铭刻的词条挂在提示尾巴上 —— 背包里 / 快捷栏上悬停就能看见，
+   * 不用为了确认「这把剑刻没刻过」再跑一趟附魔台。 */
+  const enchTip = () => {
+    const s = enchantSummaryOf(id);
+    return s ? '  ✦ ' + s : '';
+  };
   if (d.tool) {
     const good = TIER_SPEED[d.tool.tier];
-    return `（${KIND_NAME[d.tool.kind]} · 对口材质 ×${good} · 伤害 ${TIER_DMG[d.tool.tier] + KIND_DMG[d.tool.kind]}）`;
+    const dmg = TIER_DMG[d.tool.tier] + KIND_DMG[d.tool.kind] + enchantLevel(id, 'sharp');
+    return `（${KIND_NAME[d.tool.kind]} · 对口材质 ×${good} · 伤害 ${dmg}）` + enchTip();
   }
-  if (d.armor) return `（${ARMOR_PART_NAME[d.armor.part]} · 护甲 +${d.armor.pts} · 点一下穿上）`;
-  if (d.shield) return `（按住右键格挡 · 挡掉 ${Math.round(d.shield.block * 100)}% 伤害）`;
-  if (d.staff) return `（右键发射魔法弹 · 伤害 ${d.staff.dmg} · 冷却 ${d.staff.cd}s）`;
+  if (d.armor) return `（${ARMOR_PART_NAME[d.armor.part]} · 护甲 +${d.armor.pts + enchantLevel(id, 'ward') * 2} · 点一下穿上）` + enchTip();
+  if (d.shield) {
+    const b = Math.min(0.90, d.shield.block + 0.08 * enchantLevel(id, 'bulwark'));
+    return `（按住右键格挡 · 挡掉 ${Math.round(b * 100)}% 伤害）` + enchTip();
+  }
+  if (d.staff) return `（右键发射魔法弹 · 伤害 ${d.staff.dmg} · 冷却 ${d.staff.cd}s）` + enchTip();
   if (d.food) return `（食物，右键吃，+${d.food} 饥饿）`;
-  if (id === I.BOW) return '（按住右键蓄力，松手射出）';
+  if (id === I.BOW) return '（按住右键蓄力，松手射出）' + enchTip();
   if (id === I.ARROW) return '（弓的弹药）';
   if (d.summon) return `（右键召唤${MOB_TYPES[d.summon].name} · 会主动攻击敌对生物）`;
   if (d.spawn) return `（右键在准星处放出一只${MOB_TYPES[d.spawn].name} · 白天黑夜都能用）`;

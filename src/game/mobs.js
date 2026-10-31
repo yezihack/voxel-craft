@@ -5,11 +5,12 @@ import { spawnParticles } from './actions.js'
 import { blip, noiseBurst } from './audio.js'
 import { BLOCKS, D, EGG_OF, EYE, G, H, I, ITEMS, JUMP_V, MAT_PLAIN, PW, REACH_ATTACK, SUMMON_OF, TILE_INDEX, UV_QUAD, attackDamage, setMobTypes, tileUV } from './config.js'
 import { CELL, DIMS, structAnchor, structAt } from './dims.js'
+import { enchantLevel } from './enchant.js'
 import { getEffective, isLiquid, isSolid, setBlock } from './generate.js'
 import { keys } from './input.js'
 import { FACES } from './mesher.js'
 import { moveBodyAxis, player } from './player.js'
-import { hurt, inv, invAdd } from './survival.js'
+import { heal, heldId, hurt, inv, invAdd } from './survival.js'
 import { shade } from './textures.js'
 
 /* ============================== 生物 ============================== */
@@ -1312,7 +1313,13 @@ export function tryAttackMob(dt, blockDist = Infinity) {
   if (!hit || hit.dist >= blockDist) return false;
   setSwingT(0.32);
   setHandSwing(1);
+  /* 吸血词条：**击杀才回血**（打一下回一点就成了无限续航，那是另一回事）。
+   * 必须在 damageMob 之后读 m.dead —— 致死判定就在里面。
+   * 只挂在玩家挥击这一路：bots.js 也调 damageMob，但 AI 玩家没有附魔台，
+   * 让它们跟着回血会变成「打不死的邻居」。 */
+  const leech = enchantLevel(heldId(), 'leech');
   damageMob(hit.mob, attackDamage(), dir[0], dir[2]);
+  if (leech && hit.mob.dead) heal(leech * 2);
   return true;
 }
 
@@ -1335,7 +1342,11 @@ export function fireArrow(power) {
   arrows.push({
     x: p.x + dx * 0.4, y: p.y + EYE - 0.12 + dy * 0.4, z: p.z + dz * 0.4,
     vx: dx * v, vy: dy * v + power * 2.4, vz: dz * v,
-    life: 6, dmg: 3 + Math.round(power * 4),
+    life: 6,
+    /* 弓术词条：每级 +1 箭伤。加在「蓄力伤害」之上而不是乘算 ——
+     * 乘算会让满蓄力一箭（7 点）配 II 级变成 9 点，接近星陨剑的近战输出，
+     * 远程就彻底压过近战了。 */
+    dmg: 3 + Math.round(power * 4) + enchantLevel(heldId(), 'power'),
   });
   setHandSwing(1);
   return true;

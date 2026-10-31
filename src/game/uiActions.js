@@ -3,16 +3,17 @@
  * 所有「用户点了界面上某个东西」要触发的逻辑都在这里导出，组件只管调用，
  * 不去碰引擎内部状态。原先散落在 onclick / addEventListener 里的代码全部收拢到此。 */
 import { audio, blip } from './audio.js'
-import { doBreak, doPlace } from './actions.js'
+import { doBreak, doPlace, setOpenEnchantHook } from './actions.js'
 import { armorAt, armorPoints, armorReduction, setArmorPiece } from './armor.js'
 import { despawnAllBots, despawnAllBotDrops } from './bots.js'
 import { despawnAllCarts } from './carts.js'
-import { ARMOR_OF, ARMOR_PART_NAME, HOTBAR, defName } from './config.js'
+import { ARMOR_OF, ARMOR_PART_NAME, HOTBAR, I, defName } from './config.js'
 import {
   craftAutoFill, craftClearAt, craftResult, craftSlots,
   clearCraft, doCraft, recipeBookEntries, recipeMissing,
 } from './crafting.js'
 import { DIMS } from './dims.js'
+import { ENCH, costOf, enchantLevel, inscribe, isEnchantable } from './enchant.js'
 import { input, keys } from './input.js'
 import { clamp } from './math.js'
 import { chunks } from './mesher.js'
@@ -20,7 +21,7 @@ import { arrows, despawnAllMobs, surfaceY } from './mobs.js'
 import { player } from './player.js'
 import { canvas } from './renderer.js'
 import { countEdits, deleteSave, exportSaveJson, hasSave, importSaveJson, loadGame, saveGame, saveMeta } from './save.js'
-import { HOTBAR_N, activeSlots, cancelDig, invAdd, invCount, invTake, respawn } from './survival.js'
+import { HOTBAR_N, activeSlots, cancelDig, heldId, invAdd, invCount, invTake, respawn } from './survival.js'
 import {
   MODE, SEED, bowCharge, breakHeld, dim, flatWorld, lookVec, mode, paused, placeHeld,
   placeRepeat, running, selected, setBowCharge, setBreakHeld, setColCache,
@@ -180,17 +181,31 @@ export function pickWorldType(flat) {
   blip(v ? 620 : 420, 0.10, 'sine', 0.05)
 }
 
-/* ---------------- 开始 / 暂停 / 背包面板 ---------------- */
+/* ---------------- 开始 / 暂停 / 背包面板 ----------------
+ *
+ * 请求指针锁定的安全封装。
+ * 新版 Chrome 的 requestPointerLock() 返回 Promise，没有用户手势时它会
+ * **reject**；不接住就是一条 unhandledrejection，而 App.vue 把未捕获异常
+ * 一律显示成「游戏出错了」—— 玩家会看到一句英文报错糊在屏幕上。
+ * 典型触发场景：按 Esc 关面板时那一下点击不被算作手势、或者刚 alt-tab 回来。
+ * 所以：接住 promise，同步抛也吞掉。锁不上本来就有 pointerlockerror 兜底。 */
+function requestLockSafe() {
+  try {
+    const r = canvas.requestPointerLock && canvas.requestPointerLock()
+    if (r && typeof r.catch === 'function') r.catch(() => {})
+  } catch { /* 老浏览器同步抛，忽略 */ }
+}
 
 export function startGame(wantLock = true) {
   audio()
   if (ui.bagOpen) closeBag(true)
+  if (ui.enchantOpen) closeEnchant(true)
   setRunning(true)
   setPaused(false)
   ui.started = true
   ui.veilVisible = false
   ui.deathVisible = false
-  if (wantLock && canvas.requestPointerLock) canvas.requestPointerLock()
+  if (wantLock) requestLockSafe()
 }
 
 export function pauseGame() {
@@ -200,7 +215,9 @@ export function pauseGame() {
   setBreakHeld(false); setPlaceHeld(false); setPlaceRepeat(false)
   setBowCharge(0)
   cancelDig()
-  if (ui.bagOpen) return              // 背包面板自己就是「暂停界面」，别叠加遮罩
+  /* 背包 / 附魔台面板本身就是「暂停界面」，别再叠一层遮罩 ——
+   * 两层叠在一起时点掉遮罩会留下一个还在暂停的游戏，玩家以为卡死了。 */
+  if (ui.bagOpen || ui.enchantOpen) return
   ui.veilVisible = true
   ui.veilHint = ui.touch
     ? '已暂停 — 点「开始游戏」继续'
@@ -211,6 +228,7 @@ export function pauseGame() {
  * 浏览器对「刚退出锁定就立刻重新锁定」有冷却，若被拒绝，
  * 就退化成显示暂停遮罩 —— 点一下即可继续，不会卡死。 */
 export function openBag() {
+  if (ui.enchantOpen) closeEnchant(true)   // 两个面板互斥，不然会叠在一起
   ui.bagOpen = true
   ui.veilVisible = false
   if (document.pointerLockElement === canvas) document.exitPointerLock()
@@ -221,7 +239,7 @@ export function openBag() {
 export function closeBag(silent) {
   ui.bagOpen = false
   if (ui.touch) { startGame(false); return }
-  if (canvas.requestPointerLock) canvas.requestPointerLock()
+  requestLockSafe()
   if (!silent) blip(440, 0.06, 'sine', 0.05)
 }
 
@@ -261,6 +279,90 @@ export function unequipArmorSlot(part) {
 
 /* 护甲总点数 / 减伤百分比 —— 给 HUD 与背包面板显示 */
 export const armorStat = () => ({ pts: armorPoints(), red: armorReduction() })
+
+/* ---------------- 附魔台 ----------------
+ * 词条规则（哪些能刻、刻到几级、要什么材料）全在 enchant.js；
+ * 这里只做三件界面侧的事：开关台面、选装备、扣材料后调用 inscribe。
+ *
+ * 和背包面板完全同构：打开 = 退出指针锁（拿不到就手动暂停），关闭 = 请求锁回来。
+ * 两个面板互斥 —— 同时开着的话，Esc 只能关掉其中一个，另一个就成了鬼影。 */
+export function openEnchant() {
+  if (ui.bagOpen) closeBag(true)
+  ui.enchantOpen = true
+  ui.veilVisible = false
+  /* 台面默认把**手上正拿着的**可附魔装备摆上去：玩家是「手持剑对着台子右键」
+   * 进来的，想刻的多半就是手里这把，省掉一次多余的点击。
+   * 手里是方块/食物时就保持上一次的选择（可能是空）。 */
+  const held = heldId()
+  if (isEnchantable(held)) ui.enchantTarget = held
+  if (document.pointerLockElement === canvas) document.exitPointerLock()
+  else pauseGame()
+  blip(760, 0.09, 'sine', 0.05)
+}
+
+export function closeEnchant(silent) {
+  if (!ui.enchantOpen) return
+  ui.enchantOpen = false
+  ui.enchantTarget = 0
+  if (ui.touch) { startGame(false); return }
+  requestLockSafe()
+  if (!silent) blip(440, 0.06, 'sine', 0.05)
+}
+
+/* 点左侧的装备 = 摆到台面上 */
+export function enchantPickItem(id) {
+  const v = id | 0
+  if (v && !isEnchantable(v)) {
+    toast('这件东西上不了附魔台 —— 只有武器 / 工具 / 护甲 / 弓 / 盾能铭刻')
+    blip(180, 0.09, 'square', 0.04)
+    return false
+  }
+  ui.enchantTarget = v
+  blip(660, 0.05, 'sine', 0.035)
+  return true
+}
+
+/* 铭刻一级：先整体校验材料，再一次性扣，最后改等级。
+ * 顺序不能反 —— 先扣再校验的话，一旦后面失败，材料就白扣了（背包是不可回滚的）。 */
+export function enchantInscribe(key) {
+  const id = ui.enchantTarget | 0
+  const e = ENCH[key]
+  if (!id || !e) return { ok: false, reason: 'none' }
+  if (!e.fits(id)) return { ok: false, reason: 'fit' }
+  const lv = enchantLevel(id, key)
+  if (lv >= e.max) {
+    toast(e.name + ' 已经到顶了（' + 'I'.repeat(e.max) + '）')
+    blip(200, 0.08, 'square', 0.03)
+    return { ok: false, reason: 'max' }
+  }
+  const cost = costOf(key, lv + 1)
+  const surv = mode === MODE.SURVIVAL
+  if (surv) {
+    const miss = cost.filter((c) => invCount(c.id) < c.n)
+    if (miss.length) {
+      toast('材料不够：缺 ' + miss.map((c) => defName(c.id) + '×' + (c.n - invCount(c.id))).join('、'))
+      blip(200, 0.08, 'square', 0.03)
+      return { ok: false, reason: 'cost' }
+    }
+    for (const c of cost) invTake(c.id, c.n)
+  }
+  const r = inscribe(id, key)
+  if (!r.ok) return r
+  blip(980, 0.10, 'sine', 0.06)
+  toast(`✨ ${defName(id)} 铭刻「${e.name} ${'I'.repeat(r.level)}」 · ${e.desc(r.level)}`)
+  return r
+}
+
+/* 把「开台」这个动作接回 actions.js 的右键分派（那边不能反向 import 本模块）。
+ *
+ * ⚠ **不能在本模块顶层调用**。actions.js 和本模块之间本来就有一条环：
+ *   actions → mobs → input → uiActions → actions
+ * 于是本模块的函数体可能在 actions.js 还停在「求值中」的时候就开始跑，
+ * 此刻 actions 里的 `let onOpenEnchant` 还没初始化 —— 顶层调用必然撞
+ * 「Cannot access 'onOpenEnchant' before initialization」（TDZ）。
+ * 这和 bots.js 的 installBotHook 是同一个坑，解法也一样：
+ * 由一个「一切都就位之后」的时机来装，即 boot()。 */
+export function installEnchantHook() { setOpenEnchantHook(openEnchant) }
 
 /* ---------------- 存档 ---------------- */
 
@@ -306,6 +408,7 @@ export function loadNow() {
   ui.selected = selected
   ui.deathVisible = false
   if (ui.bagOpen) closeBag(true)
+  if (ui.enchantOpen) closeEnchant(true)
   toast(`📂 已读档 · ${DIMS[dim].name} · ${countEdits()} 格改动`)
   blip(660, 0.12, 'sine', 0.06)
   return r
@@ -456,8 +559,11 @@ export function touchPlace(on) {
   setLastAction(performance.now() / 1000)
 }
 
-/* 键盘 Esc：开着背包就关背包，其余交给 pointerlockchange */
+/* 键盘 Esc：开着附魔台 / 背包就关掉，其余交给 pointerlockchange。
+ * 顺序固定（附魔台 → 背包）：两个面板互斥，所以这个顺序只在「都开着」这种
+ * 本不该出现的状态里才有意义，但按「后开的先关」总不会错。 */
 export function onEscape() {
+  if (ui.enchantOpen) { closeEnchant(); return }
   if (ui.bagOpen) closeBag()
 }
 

@@ -15,6 +15,7 @@
  */
 import { CD, CW, DIM_N } from './config.js'
 import { armorRestore, armorSnapshot, clearArmor } from './armor.js'
+import { enchantRestore, enchantSnapshot } from './enchant.js'
 import { dimEdits } from './generate.js'
 import { chunks, initChunks } from './mesher.js'
 import { setWorldTime, worldTime } from './mobs.js'
@@ -88,6 +89,9 @@ export function snapshot() {
     inv: [...inv.entries()],
     slots: [...invSlots],
     armor: armorSnapshot(),
+    /* 附魔铭刻：{ 物品id: { 词条键: 等级 } }。是「世界状态」而不是「玩家状态」
+     * （换了世界也该跟着走），但存档本来就是世界 + 玩家一体的，放这一层最省事。 */
+    ench: enchantSnapshot(),
     selected,
     edits: editsToArray(),
   }
@@ -231,6 +235,16 @@ export function applySave(d) {
   /* ---- 7. 盔甲 ---- */
   clearArmor()
   armorRestore(d.armor)
+
+  /* ---- 7b. 附魔铭刻 ----
+   * 无条件调一次（老档没有这个字段就传 undefined）—— enchantRestore 内部
+   * 会先清空再逐条校验，所以「没有附魔数据」等价于「一件都没刻」，而不是
+   * 「保留上一次读档留下的词条」。少了这句，从有附魔的档切到无附魔的档，
+   * 词条会跟着世界一起留下来 —— 那是跨存档的作弊。
+   *
+   * 校验（词条键存在 / 适用该装备 / 等级在 1..max）在 enchant.js 里做：
+   * 存档是可以被玩家手改的文件，一条 sharp:999 就能把攻击力变成 999。 */
+  enchantRestore(d.ench)
 
   /* ---- 8. 模式 ---- */
   setModeState(wantMode)

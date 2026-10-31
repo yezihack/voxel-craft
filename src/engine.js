@@ -34,6 +34,9 @@ const NOT_READY_KEYS = [
   'saveNow', 'loadNow', 'saveStatus', 'pauseGame', 'exportSave', 'importSaveFile',
   'toggleBag', 'toggleBagExpand', 'cycleMode', 'toggleFly', 'selectSlot',
   'setStick', 'setLook', 'setInputKey', 'touchMine', 'touchPlace',
+  /* 附魔台面板虽然要进游戏才会打开，但模板里的按钮从第一帧就存在 ——
+   * 漏了这几个键，面板一旦先渲染出来就会抛 `engine.closeEnchant is not a function`。 */
+  'openEnchant', 'closeEnchant', 'enchantPickItem', 'enchantInscribe',
 ]
 for (const k of NOT_READY_KEYS) {
   engine[k] = () => {

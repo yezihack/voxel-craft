@@ -766,6 +766,59 @@ export const TILE_GEN = {
         if (dx * dx + dy * dy < 9) P(x, y, shade(c, 130));
       }
   },
+  /* ---------------- 附魔台 ----------------
+   * 台面与台身两格，刻意做成「一眼是仪式家具」而不是又一块石头：
+   *   台面 = 深紫石面 + 双层符文环 + 四向刻痕（俯视时像个法阵）
+   *   台身 = 黑曜石质感的深灰噪点 + 一条竖向紫光缝（凹进去的立体感）
+   * 两格都整张不透明，走 MAT_PLAIN —— 不做发光呼吸，
+   * 那是传送门的语义（MAT_PORTAL），混用会让人以为这台子能走进去。
+   *
+   * ⚠ 所有坐标按 TP / TPH 的比例算，不写裸的 16 / 15（见文件头纪律）。 */
+  enchant_top(s, c) {
+    const rune = [190, 152, 255];
+    const cx = TPH - 0.5, cy = TPH - 0.5;
+    for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++) {
+      const dx = x - cx, dy = y - cy;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      let col = shade(c, (hash2(x, y, s) - 0.5) * 18);
+      if (d > TPH * 0.84) col = shade(c, -28);                       // 台面倒角压暗
+      else if (d > TPH * 0.52 && d < TPH * 0.61) col = shade(rune, (hash2(x, y, s + 5) - 0.5) * 26);
+      else if (d > TPH * 0.22 && d < TPH * 0.28) col = shade(rune, -46);
+      else if (d < TPH * 0.11) col = shade(rune, 52);                // 中心亮芯
+      P(x, y, col);
+    }
+    /* 四向刻痕：从中心指向四个斜角，像仪式连线。
+     * 用「沿对角线走 5 步、每步补一格邻边」画，单像素线在 32 分辨率下会断。 */
+    for (let k = 1; k <= 5; k++) {
+      const o = Math.round(k * TPH / 6);
+      for (const [sx, sy] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+        const px = TPH - 1 + sx * o, py = TPH - 1 + sy * o;
+        P(px, py, shade(rune, 14)); P(px + 1, py, shade(rune, -18));
+      }
+    }
+  },
+  enchant_side(s, c) {
+    const dark = [24, 20, 32], glow = [152, 110, 232];
+    for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++) {
+      /* 粗颗粒（>> 1 采样）+ 少量深斑，做出黑曜石那种玻璃质感的暗块 */
+      const d = (hash2(x, y, s) - 0.5) * 26
+        - (hash2(x >> 1, y >> 1, s + 9) > 0.82 ? 16 : 0);
+      P(x, y, shade(c, d));
+    }
+    /* 竖向紫光缝：中间两列亮、两侧各一列近黑 —— 靠明暗差读出「凹槽」 */
+    const x0 = TPH - 3, x1 = TPH + 2;
+    for (let y = 2; y < TP - 2; y++) {
+      const t = y / (TP - 1);
+      const amp = Math.round(Math.sin(t * Math.PI) * 46) - 12;        // 上下收口
+      for (let x = x0; x <= x1; x++) {
+        const core = x >= TPH - 1 && x <= TPH;
+        P(x, y, core ? shade(glow, amp) : dark);
+      }
+    }
+    for (let x = 0; x < TP; x++) {                                    // 上下横缝
+      P(x, 1, shade(c, -44)); P(x, TP - 2, shade(c, -36));
+    }
+  },
   /* 矿车车身：金属板 + 铆钉。整张不透明 —— 它是实体网格，不走镂空。 */
   cart_metal(s, c) {
     for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++)

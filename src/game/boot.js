@@ -21,7 +21,7 @@ import { buildCloudTexture } from './sky.js'
 import { breakHeld, paused, running, setBowCharge, setBreakHeld, setOnDeath, setOnHurt, setPaused, setPlaceHeld, setPlaceRepeat, setRunning } from './state.js'
 import { cancelDig } from './survival.js'
 import { buildAtlas } from './textures.js'
-import { pauseGame, saveNow, showDeath } from './uiActions.js'
+import { installEnchantHook, pauseGame, saveNow, showDeath } from './uiActions.js'
 import { ui } from './uiState.js'
 
 /* ---------------- 系统级事件：指针锁定 ----------------
@@ -30,7 +30,9 @@ import { ui } from './uiState.js'
 export function attachSystemEvents() {
   document.addEventListener('pointerlockchange', () => {
     if (document.pointerLockElement === canvas) {
-      if (ui.bagOpen) return
+      /* 面板开着时（背包 / 附魔台）拿回指针锁不该把游戏跑起来 ——
+       * 面板还要用真实鼠标点按钮。 */
+      if (ui.bagOpen || ui.enchantOpen) return
       ui.veilVisible = false
       setRunning(true); setPaused(false)
     } else if (running) {
@@ -47,7 +49,7 @@ export function attachSystemEvents() {
    * 触屏本来就不锁鼠标（startGame 传的是 !ui.touch），这条错误对它没有意义。 */
   document.addEventListener('pointerlockerror', () => {
     if (ui.touch) return
-    if (!ui.bagOpen) pauseGame()
+    if (!ui.bagOpen && !ui.enchantOpen) pauseGame()
   })
   /* 切到后台就暂停。
    * 手机上「闪退」最常见的真相是：切走时浏览器回收了 WebGL 上下文，
@@ -93,6 +95,9 @@ export function attachSurvivalHooks() {
 export function boot() {
   const t0 = performance.now()
   installBotHook()      // 把 AI 玩家登记给生物模块（僵尸才会把他们当猎物）
+  /* 把「右键附魔台 → 开台面」接进 actions.js。必须在这里装而不是在
+   * uiActions.js 顶层：那两个模块之间有环，顶层装会撞 TDZ（见那边注释）。 */
+  installEnchantHook()
   const info = generate(20260918)
   player.spawn = findSpawn()
   dimSpawn[0] = player.spawn              // 主世界的出生点登记进维度表（R 键 / 死亡重生用）

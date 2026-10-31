@@ -8,8 +8,8 @@ import { camEye } from './loop.js'
 import { clamp } from './math.js'
 import { MOB_TYPES, raycastMob } from './mobs.js'
 import { player } from './player.js'
-import { closeBag, cycleMode, loadNow, saveNow, selectSlot, toggleBag } from './uiActions.js'
-import { toast, ui } from './uiState.js'
+import { cycleMode, loadNow, onEscape, saveNow, selectSlot, toggleBag } from './uiActions.js'
+import { toast } from './uiState.js'
 import { canvas } from './renderer.js'
 import { HOTBAR_N, respawn } from './survival.js'
 
@@ -85,7 +85,9 @@ window.addEventListener('keydown', (e) => {
    * 万一某个浏览器拦不住 F5，玩家仍有别的入口。 */
   if (k === 'F5') { e.preventDefault(); saveNow(true); }
   if (k === 'F9') { e.preventDefault(); loadNow(); }
-  if (k === 'Escape') { if (ui.bagOpen) closeBag(); /* 其余交给 pointerlockchange */ }
+  /* Esc：先关面板（附魔台 → 背包），其余交给 pointerlockchange。
+   * 统一走 uiActions.onEscape，别在这里再抄一遍判断 —— 抄一遍就会漏掉新面板。 */
+  if (k === 'Escape') onEscape();
 });
 window.addEventListener('keyup', (e) => {
   const k = e.code;

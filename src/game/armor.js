@@ -14,6 +14,7 @@
  */
 import { reactive } from 'vue'
 import { ARMOR_OF, ARMOR_PARTS } from './config.js'
+import { enchantLevel } from './enchant.js'
 
 /* 四个槽位：id → 0 表示空。顺序固定为 ARMOR_PARTS（头 / 胸 / 腿 / 脚）。 */
 export const armorSlots = reactive({ head: 0, chest: 0, legs: 0, feet: 0 })
@@ -22,12 +23,20 @@ export const ARMOR_PER_POINT = 0.032   // 每点护甲的减伤比例
 export const ARMOR_MAX_RED = 0.72      // 减伤上限
 export const ARMOR_MAX_POINTS = 24     // 单件最高 9 + 4 + 7 + 4 = 24（星陨整套）
 
-/* 当前穿着的护甲总点数 */
+/* 当前穿着的护甲总点数。
+ *
+ * 守护词条按**件**加：每件 +2 点/级（见 enchant.js 的 ward）。所以「把整套
+ * 四件都刻到 III」是 4 × 6 = 24 点额外护甲 —— 但减伤有 72% 的硬顶，
+ * 真到那一步它顶的是「换掉一件星陨甲也不掉档」，而不是让玩家无敌。
+ *
+ * 依赖方向：本模块 → enchant.js → config.js，没有环（见 enchant.js 头注释）。 */
 export function armorPoints() {
   let n = 0
   for (const part of ARMOR_PARTS) {
-    const a = ARMOR_OF[armorSlots[part]]
-    if (a) n += a.pts
+    const id = armorSlots[part]
+    const a = ARMOR_OF[id]
+    if (!a) continue
+    n += a.pts + enchantLevel(id, 'ward') * 2
   }
   return n
 }
