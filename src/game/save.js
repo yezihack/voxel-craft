@@ -13,7 +13,7 @@
  * 否则 save ↔ uiActions 会成环（uiActions 需要 saveGame 给按钮用）。
  * 需要弹提示的地方一律通过返回值表达，由调用方决定怎么显示。
  */
-import { CD, CW, DIM_N } from './config.js'
+import { CD, CW, DIM_N, isBlockId } from './config.js'
 import { armorRestore, armorSnapshot, clearArmor } from './armor.js'
 import { enchantRestore, enchantSnapshot } from './enchant.js'
 import { dimEdits } from './generate.js'
@@ -174,8 +174,18 @@ export function applySave(d) {
     if (!list) continue
     for (const pair of list) {
       if (!pair || pair.length < 2) continue
-      const id = pair[1] | 0
-      if (id > 0) m.set(pair[0], id)
+      const key = pair[0]
+      const raw = +pair[1]
+      /* ⚠ id 为 0 是**有意义的**，不能过滤掉。
+       * 挖掉一格方块时 setBlock 走的是 `edits.set(k, 0)`（见 generate.js）——
+       * 值 0 表示「这格被我挖成空气了」，不是「没有改动」。这里曾经写成
+       * `if (id > 0)`，结果所有挖出来的沟读档后全部长回原样，而放上去的方块
+       * 因为 id>0 反而活得好好的 —— 玩家看到的就是「我挖的沟没了」。
+       * 只挡掉非法值：负数 / NaN / 超界 id / 非字符串键。 */
+      if (typeof key !== 'string' || !Number.isFinite(raw) || raw < 0) continue
+      const id = raw | 0
+      if (id !== 0 && !isBlockId(id)) continue
+      m.set(key, id)
     }
   }
 
