@@ -21,11 +21,16 @@ export let tilePenX = 0, tilePenY = 0;              // 当前正在画的格子�
 export const ITEM_TEX_COLOR = {};
 for (const k in ITEMS) ITEM_TEX_COLOR['item_' + ITEMS[k].tex] = ITEMS[k].color;
 
+/* 颜色通道钳制到 0..255。必须做：`shade(c, -76)` 这类调用在深色基色上会算出负数，
+ * 而 `rgb(-22,-26,-22)` 是**无效 CSS**，canvas 遇到无效值会**保留上一次的 fillStyle**
+ * —— 于是那一格画出的是上一个贴图的颜色，症状是「某个深色贴图整块变成别的颜色」。 */
+const cl = (v) => (v < 0 ? 0 : v > 255 ? 255 : v | 0);
+
 export function P(x, y, c, a) {
   if (x < 0 || y < 0 || x > TPM || y > TPM) return;   // 越界裁掉，防止画穿到隔壁格子
   alctx.fillStyle = (a === undefined || a >= 1)
-    ? 'rgb(' + (c[0] | 0) + ',' + (c[1] | 0) + ',' + (c[2] | 0) + ')'
-    : 'rgba(' + (c[0] | 0) + ',' + (c[1] | 0) + ',' + (c[2] | 0) + ',' + a + ')';
+    ? 'rgb(' + cl(c[0]) + ',' + cl(c[1]) + ',' + cl(c[2]) + ')'
+    : 'rgba(' + cl(c[0]) + ',' + cl(c[1]) + ',' + cl(c[2]) + ',' + a + ')';
   alctx.fillRect(tilePenX + x, tilePenY + y, 1, 1);
 }
 export const shade = (c, d) => [c[0] + d, c[1] + d, c[2] + d];
@@ -573,27 +578,51 @@ export const TILE_GEN = {
    * 只有「半格」这种跟 TP 走的量才用 TPH —— 别在这里写裸的 16。 */
   mob_iron_plate: (s, c) => {
     for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++) {
-      const plate = (hash2(x >> 3, y >> 4, s) - 0.5) * 14;      // 大块面板之间的色差
-      P(x, y, shade(c, plate + (hash2(x, y, s + 5) - 0.5) * 7));
+      const plate = (hash2(x >> 3, y >> 4, s) - 0.5) * 30;      // 大块面板之间的色差
+      P(x, y, shade(c, plate + (hash2(x, y, s + 5) - 0.5) * 12));
     }
-    const seam = shade(c, -34), hi = shade(c, 26);
+    /* 竖向拉丝：铁板压延留下的痕。基色 198 很亮，±14 的噪声根本看不出来，
+     * 必须有这种「成条的暗线」才有金属质感。 */
+    for (let x = 0; x < TP; x += 3)
+      for (let y = 0; y < TP; y++) if (hash2(x, y, s + 9) > 0.3) P(x, y, shade(c, -26));
+    const seam = shade(c, -62), hi = shade(c, 42);
     for (let x = 0; x < TP; x++) { P(x, TPH - 1, seam); P(x, TPH, hi); }   // 横向板缝
     for (const rx of [5, TP - 8]) for (const ry of [5, TP - 8]) {          // 四颗铆钉
-      P(rx, ry, hi); P(rx + 1, ry, shade(c, 12));
-      P(rx, ry + 1, shade(c, 12)); P(rx + 1, ry + 1, shade(c, -26));
+      P(rx, ry, hi); P(rx + 1, ry, shade(c, 16));
+      P(rx, ry + 1, shade(c, 4)); P(rx + 1, ry + 1, shade(c, -48));
+    }
+    for (let i = 0; i < 4; i++) {                                          // 锈斑：四团不规则的暗橙
+      const bx = Math.floor(hash2(i, 21, s) * (TP - 7)) + 2;
+      const by = Math.floor(hash2(i, 23, s) * (TP - 7)) + 2;
+      for (let k = 0; k < 8; k++) {
+        const x = bx + Math.floor(hash2(i * 9 + k, 31, s) * 4);
+        const y = by + Math.floor(hash2(i * 9 + k, 37, s) * 4);
+        P(x, y, [c[0] - 54, c[1] - 68, c[2] - 74]);
+      }
     }
   },
   mob_iron_face: (s, c) => {
     for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++) {
-      const plate = (hash2(x >> 3, y >> 3, s) - 0.5) * 12;
-      P(x, y, shade(c, plate + (hash2(x, y, s + 7) - 0.5) * 6));
+      const plate = (hash2(x >> 3, y >> 3, s) - 0.5) * 22;
+      P(x, y, shade(c, plate + (hash2(x, y, s + 7) - 0.5) * 10));
     }
-    const dark = shade(c, -76), hi = shade(c, 30);
+    const dark = shade(c, -96), hi = shade(c, 46);
     for (let x = 5; x <= 12; x++) for (let y = 11; y <= 15; y++) P(x, y, dark);
     for (let x = TP - 13; x <= TP - 6; x++) for (let y = 11; y <= 15; y++) P(x, y, dark);
-    for (let y = 17; y <= 27; y++) for (let x = TPH - 2; x <= TPH + 1; x++) P(x, y, shade(c, -30));  // 长鼻梁
+    for (let y = 17; y <= 27; y++) for (let x = TPH - 2; x <= TPH + 1; x++) P(x, y, shade(c, -40));  // 长鼻梁
+    for (let y = 17; y <= 27; y++) P(TPH - 3, y, shade(c, 30));       // 鼻梁左侧受光
     for (let x = 5; x <= 12; x++) P(x, 10, hi);                       // 眼上的一道受光棱
     for (let x = TP - 13; x <= TP - 6; x++) P(x, 10, hi);
+    for (let x = 0; x < TP; x++) P(x, 28, shade(c, -54));             // 下颌分界
+    for (let i = 0; i < 3; i++) {                                     // 脸颊锈斑
+      const bx = Math.floor(hash2(i, 61, s) * (TP - 8)) + 2;
+      const by = 18 + Math.floor(hash2(i, 63, s) * 8);
+      for (let k = 0; k < 6; k++) {
+        const x = bx + Math.floor(hash2(i * 7 + k, 71, s) * 4);
+        const y = by + Math.floor(hash2(i * 7 + k, 73, s) * 3);
+        P(x, y, [c[0] - 56, c[1] - 70, c[2] - 76]);
+      }
+    }
   },
   mob_golem_vine: (s, c) => {
     for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++)
@@ -621,9 +650,18 @@ export const TILE_GEN = {
     for (let x = 9; x <= TP - 10; x++) P(x, 24, shade(c, -56));        // 一条横缝当嘴
   },
   mob_snowman: (s, c) => {
-    noiseTile(s, c, 8, 0.03);
-    for (let i = 0; i < 22; i++)                                      // 雪的亮晶
-      P(Math.floor(hash2(i, 17, s) * TP), Math.floor(hash2(i, 29, s) * TP), shade(c, 20));
+    /* 基色 240 已经贴到白，±8 的噪声等于没画 —— 必须用大颗粒 + 暗部 + 灰杂质
+     * 三件套，雪球才有体积感。 */
+    for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++) {
+      const big = (hash2(x >> 2, y >> 2, s) - 0.5) * 28;
+      P(x, y, shade(c, big + (hash2(x, y, s + 2) - 0.5) * 10));
+    }
+    for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++)   // 右下暗部：雪球的体积
+      if (x + y > TP * 1.42) P(x, y, shade(c, -20));
+    for (let i = 0; i < 26; i++)                                // 雪的亮晶
+      P(Math.floor(hash2(i, 17, s) * TP), Math.floor(hash2(i, 29, s) * TP), [255, 255, 255]);
+    for (let i = 0; i < 10; i++)                                // 雪里的灰色杂质
+      P(Math.floor(hash2(i, 41, s) * TP), Math.floor(hash2(i, 43, s) * TP), shade(c, -36));
   },
   mob_snow_face: (s, c) => {
     noiseTile(s, c, 8, 0.03);
@@ -789,11 +827,23 @@ export const TILE_GEN = {
         for (let x = 0; x < TP; x++) P(x, y, shade(c, -18));
   },
   mob_wither_face: (s, c) => {
-    for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++) P(x, y, shade(c, -50));
-    const ink = [12, 8, 12];
-    for (let y = 12; y <= 15; y++) for (let x = 8; x <= 13; x++) P(x, y, ink);
-    for (let y = 12; y <= 15; y++) for (let x = 18; x <= 23; x++) P(x, y, ink);
-    for (let y = 18; y <= 22; y++) for (let x = 13; x <= 18; x++) P(x, y, ink);
+    /* 凋灵的脸：**不能**用 `shade(c, -50)` —— 基色 28 减完是负数，rgb() 拿到无效值，
+     * canvas 会保留上一格的 fillStyle，整张脸糊成一块黑、五官全看不见。
+     * 改成固定深灰紫底 + 噪点 + 发光紫瞳。 */
+    const base = [48, 42, 52];
+    for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++)
+      P(x, y, shade(base, (hash2(x >> 1, y >> 1, s) - 0.5) * 18 + (hash2(x, y, s + 3) - 0.5) * 8));
+    const ink = [10, 6, 12];
+    for (let y = 12; y <= 16; y++) for (let x = 7; x <= 13; x++) P(x, y, ink);
+    for (let y = 12; y <= 16; y++) for (let x = 18; x <= 24; x++) P(x, y, ink);
+    for (let y = 19; y <= 23; y++) for (let x = 13; x <= 18; x++) P(x, y, ink);
+    const eye = [176, 84, 208], eyeHi = [234, 180, 255];
+    for (const [ex, ey] of [[9, 13], [20, 13]]) {
+      for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) P(ex + x, ey + y, eye);
+      P(ex + 1, ey + 1, eyeHi);
+      P(ex - 1, ey + 1, [110, 52, 132], 0.55); P(ex + 3, ey + 1, [110, 52, 132], 0.55);
+      P(ex + 1, ey - 1, [110, 52, 132], 0.55); P(ex + 1, ey + 3, [110, 52, 132], 0.55);
+    }
   },
   mob_guardian: (s, c) => {
     /* 远古守卫：青蓝石甲 + 甲片分割线 + 四颗铆钉。 */
