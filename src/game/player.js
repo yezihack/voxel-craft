@@ -5,6 +5,7 @@ import { BLOCKS, EYE, G, I, JUMP_V, PW } from './config.js'
 import { DIMS } from './dims.js'
 import { getEffective, isLiquid, isSolid } from './generate.js'
 import { input } from './input.js'
+import { potionJumpMul, potionSpeedMul } from './potions.js'
 import { die, respawn } from './survival.js'
 
 /* ============================== 玩家 ============================== */
@@ -91,6 +92,9 @@ export function updatePhysics(dt, input) {
   const sprint = input.shift && !p.fly ? 1.45 : 1;
   let speed = (p.fly ? 13 : p.inLava ? 1.7 : p.inWater ? 3.4 : 4.9) * sprint;
   if (input.sprint) speed *= 1.25;
+  /* 药水：迅捷 / 缓慢。放在所有基础倍率之后 —— 它们都是乘算，
+   * 顺序不影响结果，但放最后读起来是「最终再按药水修正」。 */
+  speed *= potionSpeedMul();
   /* 举盾时挪不快：挡得住就打不快、走得慢，这是格挡该有的代价。
    * 取 0.42 而不是 0.2 —— 太低会让「举着盾撤退」变成原地挨打。 */
   if (p.blocking) speed *= 0.42;
@@ -132,7 +136,7 @@ export function updatePhysics(dt, input) {
     p.vy -= g * dt;
     if (p.inLava) { p.vy = Math.max(p.vy, -1.2); p.vx *= 0.80; p.vz *= 0.80; }
     else if (p.inWater) { p.vy = Math.max(p.vy, -3.2); p.vx *= 0.94; p.vz *= 0.94; }
-    if (input.jump && (p.onGround || p.inWater)) { p.vy = p.inWater ? 4.2 : JUMP_V; p.onGround = false; }
+    if (input.jump && (p.onGround || p.inWater)) { p.vy = p.inWater ? 4.2 : JUMP_V * potionJumpMul(); p.onGround = false; }
   }
 
   p.onGround = false;

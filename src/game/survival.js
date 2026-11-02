@@ -9,6 +9,10 @@ import { getEffective } from './generate.js'
 import { input } from './input.js'
 import { clamp } from './math.js'
 import { player } from './player.js'
+import {
+  clearPotions, potionFireResist, potionPoisonPerSec, potionRegenPerSec,
+  potionResist, potionWaterBreath, tickPotions,
+} from './potions.js'
 import { MODE, mode, onDeath, onHurt, selected } from './state.js'
 
 /* ============================== 生存模式 ============================== */
@@ -100,6 +104,10 @@ export function pruneSlots() {
 
 export let deathReason = '';                  // 最近一次死亡的原因文案（界面层直接拿来显示）
 
+/* 药水的秒级结算累加器（再生 / 中毒）。
+ * 放在模块级而不是 player 上：它们是纯计时中间量，不进存档、界面也不读。 */
+let potionRegenT = 0, potionPoisonT = 0;
+
 /* reason 可选：岩浆/僵尸/摔落… —— 不传就由界面层按环境猜。
  * opts.pierce = true 表示「无视护甲与盾牌」：环境伤害（摔落 / 缺氧 /
  * 岩浆 / 仙人掌 / 饥饿）走这一路，因为护甲挡的是打击，挡不住缺氧和坠落势能；
@@ -132,6 +140,10 @@ export function hurt(n, reason, opts) {
     }
     if (cut < n) n = Math.max(1, Math.round(cut));
   }
+  /* 药水抗性：对所有伤害（含穿透）再减 35%，和护甲相乘叠加，
+   * 最低仍保留 1 点 —— 抗性药水是减伤，不是无敌。 */
+  const pres = potionResist();
+  if (pres > 0) n = Math.max(1, Math.round(n * (1 - pres)));
   p.hp = Math.max(0, p.hp - n);
   p.hurtFlash = 0.42;
   if (onHurt) onHurt(n);
@@ -158,6 +170,10 @@ export function respawn() {
   p.dead = false; p.fallPeak = null; p.exhaust = 0;
   p.drownT = p.lavaT = p.cactusT = p.regenT = p.starveT = 0;
   p.hurtFlash = 0;
+  /* 复活清空药水：否则带着「剧毒」复活会立刻掉血，
+   * 带着「抗火」复活会让人以为自己还开着挂。 */
+  clearPotions();
+  potionRegenT = 0; potionPoisonT = 0;
   p.x = p.spawn[0]; p.y = p.spawn[1]; p.z = p.spawn[2];
   p.vx = p.vy = p.vz = 0;
 }
@@ -199,6 +215,10 @@ export function updateSurvival(dt, input) {
   p.hurtFlash = Math.max(0, p.hurtFlash - dt);
   if (mode !== MODE.SURVIVAL || p.dead) return;
 
+  /* 药水计时：放在生存判定之后 —— 创造 / 旁观模式里药水不该倒计时，
+   * 否则切出去看一圈回来，刚喝的迅捷已经过期了。 */
+  tickPotions(dt);
+
   // 坠落伤害：记录离地后的最高点，落地时用它减去落点
   if (p.fly || p.inWater || p.inLava) p.fallPeak = null;
   else if (p.onGround) {
@@ -214,9 +234,9 @@ export function updateSurvival(dt, input) {
   } else if (p.fallPeak === null) p.fallPeak = p.y;
   else if (p.y > p.fallPeak) p.fallPeak = p.y;
 
-  // 溺水：只有头部没入水中才消耗氧气
+  // 溺水：只有头部没入水中才消耗氧气（水肺药水期间不消耗）
   const headId = getEffective(Math.floor(p.x), Math.floor(p.y + EYE), Math.floor(p.z));
-  if (headId === I.WATER) {
+  if (headId === I.WATER && !potionWaterBreath()) {
     p.air -= dt;
     if (p.air <= 0) {
       p.air = 0;
@@ -228,8 +248,8 @@ export function updateSurvival(dt, input) {
     p.drownT = 0;
   }
 
-  // 岩浆
-  if (p.inLava) {
+  // 岩浆（抗火药水期间不掉血，但仍会被困住 —— 抗火不是穿墙）
+  if (p.inLava && !potionFireResist()) {
     p.lavaT += dt;
     if (p.lavaT >= SURV.lavaTick) {
       p.lavaT = 0;
@@ -274,6 +294,22 @@ export function updateSurvival(dt, input) {
       p.exhaust += SURV.regenCost;
     }
   } else p.regenT = 0;
+
+  /* 药水·再生：每秒回 1 点。它不消耗饥饿 —— 药水是「用材料换来的补给」，
+   * 再叠一层饥饿消耗会让它比食物更不划算，那就没人喝了。 */
+  const regenPotion = potionRegenPerSec();
+  if (regenPotion > 0 && p.hp < p.maxHp) {
+    potionRegenT += dt;
+    if (potionRegenT >= 1) { potionRegenT = 0; heal(regenPotion); }
+  } else potionRegenT = 0;
+
+  /* 药水·剧毒：每秒 1 点真实伤害（pierce：护甲挡不住毒）。
+   * 它不会直接把血打到 0 以下 —— hurt 内部有下限，死了走正常死亡流程。 */
+  const poison = potionPoisonPerSec();
+  if (poison > 0) {
+    potionPoisonT += dt;
+    if (potionPoisonT >= 1) { potionPoisonT = 0; hurt(poison, '你中毒了', { pierce: true }); }
+  } else potionPoisonT = 0;
 
   // 饿死
   if (p.food <= 0) {

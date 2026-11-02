@@ -10,7 +10,8 @@ import { getEffective, isLiquid, isSolid, setBlock } from './generate.js'
 import { MOB_CAP, MOB_TYPES, fireMagicBolt, mobs, spawnMob, summonGolem } from './mobs.js'
 import { insideSelf, player, raycast } from './player.js'
 import { ignitePortal } from './portal.js'
-import { collectDrop, heldId, invCount, invTake, tryEat } from './survival.js'
+import { applyPotion } from './potions.js'
+import { collectDrop, heal, heldId, invCount, invTake, tryEat } from './survival.js'
 import { P } from './textures.js'
 import { axisFromYaw, clearBelt, clearPad, registerPad, setBeltDir, tryBlink } from './transport.js'
 
@@ -105,6 +106,9 @@ export function doPlace() {
     /* 法杖：右键发射一枚魔法弹（有冷却，冷却期内连按不生效）。
      * 冷却用挂钟时间而不是帧累计 —— 这样在低帧率下也不会「按十次出十发」。 */
     if (STAFF_OF[id]) { tryCastStaff(id); return; }
+    /* 药水：右键饮用。必须排在 tryEat 之前 —— 药水不是食物，
+     * 没有 food 字段，掉进 tryEat 只会静默失败。 */
+    if (ITEMS[id].potion) { tryDrinkPotion(id); return; }
     if (tryEat(id)) { noiseBurst(0.09, 0.05, 700); blip(520, 0.10, 'sine', 0.05); }
     return;
   }
@@ -203,6 +207,25 @@ export function tryCastStaff(id) {
 }
 /* 仅供测试与读档复位：把冷却清零，让下一次施法立即生效 */
 export function resetStaffCd() { staffReadyAt = 0; }
+
+/* 右键「药水」→ 饮用。
+ * 先结算效果、再扣物品：反过来（先扣）一旦 applyPotion 失败，药水就凭空消失了。
+ * 即时型（治疗）不进入持续效果列表，由这里把 instantHeal 直接交给 heal()。
+ * 创造模式不扣背包（那边本来就没有背包账）。 */
+export function tryDrinkPotion(id) {
+  const d = ITEMS[id];
+  if (!d || !d.potion) return false;
+  if (mode === MODE.SURVIVAL && !invCount(id)) { toast('背包里没有这瓶药水'); return false; }
+  const r = applyPotion(d.potion);
+  if (!r.ok) return false;
+  if (mode === MODE.SURVIVAL) invTake(id, 1);
+  if (r.instantHeal) heal(r.instantHeal);
+  spawnParticles(player.x, player.y + 1.1, player.z, d.color);
+  noiseBurst(0.12, 0.05, 900);
+  blip(660, 0.12, 'sine', 0.05);
+  toast('🧪 ' + d.name + (r.instantHeal ? ' · 回复 ' + r.instantHeal + ' 点生命' : ' · ' + (d.tip || '')));
+  return true;
+}
 
 /* 右键「刷怪蛋」→ 在准星指着的方块顶上放出一只对应生物。
  * 与傀儡核心的 summonGolem 不同：这里不查 canSummonAt —— 那是傀儡专用的放置规则。

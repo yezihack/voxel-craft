@@ -13,6 +13,7 @@ import HotBar from './components/HotBar.vue'
 import HurtFlash from './components/HurtFlash.vue'
 import IconDefs from './components/IconDefs.vue'
 import NameTags from './components/NameTags.vue'
+import PotionHud from './components/PotionHud.vue'
 import StartVeil from './components/StartVeil.vue'
 import Toast from './components/Toast.vue'
 import TouchControls from './components/TouchControls.vue'
@@ -77,6 +78,7 @@ onMounted(async () => {
   <HurtFlash />
   <NameTags />
   <Vitals />
+  <PotionHud />
   <HotBar />
   <BagPanel />
   <EnchantPanel />

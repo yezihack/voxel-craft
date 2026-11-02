@@ -27,6 +27,12 @@
 ## 贴图（textures.js）
 - 程序化贴图走 noiseTile 基础 + 覆盖层；物品蛋图标正则 `^item_egg_\w+$`
   自动走 `eggIconTile`，不占新格。boss 需显式登记 MOB_TILE_COLORS 基色。
+- **16×16 逻辑格图标必须用 `PQ()`，不能用 `P()`**（2026-11-02 踩）：`P` 是 32×32
+  格里的**单像素**，拿 0..15 的坐标直接调 `P` 只会画在格子左上四分之一，
+  右下三块空白 —— 瓶子/蛋这类图标会缩成四分之一大。`PQ` 无 alpha 参数，
+  需要透明度时在函数内定局部 `Q(x,y,col,a)`（`IU = TP/16 = 2` 倍块）。
+- 玻璃瓶类图标：瓶身最外列**不能**用纯玻璃灰，会把整只瓶子洗白、液体只剩中间一条。
+  正确做法是先铺 `shade(c,-34)` 再叠玻璃灰 alpha 0.42。
 
 - 导入导出（2026-10-29）：save.js 的 `exportSaveJson` 导出的就是 SAVE_KEY
   原始 JSON（无档退回内存快照）；`importSaveJson` 只做 parse+版本校验后
@@ -68,6 +74,21 @@
 - 效率倍率**乘算**（钻石镐 ×8 → 效率 III ×20）；成本 = 基础 × 目标等级。
 - 开台走 `actions.tryOpenEnchant()`，在 `doPlace()` 里放在 `heldId()` **之前**
   （空手也能开台），右键不再贴方块。
+
+## 药水（potions.js，2026-11-02 建立）
+- `potions.js` **只依赖 config.js**，不碰 DOM/GL/player/survival。反向边（`toolSpeedOn`
+  要急迫倍率）走注入 `setPotionHasteReader`，在 potions.js **文件末尾**调用 ——
+  同 enchant 的代价：模块必须被求值一次，否则急迫**静默失效**。
+- 12 种效果全部接进真机制：治疗→`survival.heal`、迅捷/跳跃→`player.updatePhysics`、
+  力量→`mobs.js` 挥击、抗性→`hurt()` 末段乘算、再生/剧毒→`updateSurvival` 秒级累加器、
+  夜视→`loop.js` 的 `uAmbient`、水肺→溺水判定、抗火→岩浆 tick、急迫→`toolSpeedOn`。
+- **同种药水不叠层**：重复喝取 `Math.max(剩余, dur)`，否则连喝五瓶迅捷 = 5 倍速。
+- `potionRestore` **逐条校验**（键存在 / 非即时型 / `Math.min(t, dur)`），
+  `applySave` 里**无条件**调用（老档无字段时全清）。存档是玩家能手改的文件。
+- 饮用顺序：先 `applyPotion` 再 `invTake`，反过来失败时药水凭空消失。
+- 配方统一 `['a'+X]` 1×2，`a` = 空瓶；12 种材料两两不同，保证配方不互相吃。
+- HUD `PotionHud.vue` 在右上角（圆环倒计时），`.touch` 时下移 56px ——
+  遵守「底部整条是拇指区」，不碰底部居中。
 
 ## 界面 / 触屏约定
 - 游戏内**不放常驻文字 HUD**（2026-10-27 按玩家要求整块删除 HudPanel / helpKeys）。

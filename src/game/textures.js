@@ -88,9 +88,27 @@ export const TILE_GEN = {
       if (hash2(x, 41, s + 17) > 0.55) P(x, h + 1, shade(green, -58));  // 垂下的草尖
     }
   },
-  dirt: (s, c) => noiseTile(s, c, 16, 0.06),
+  dirt(s, c) {
+    /* 泥土：大颗粒底 + 小石子（受光/背光两像素）+ 几根细根。 */
+    noiseTile(s, c, 16, 0.06);
+    for (let i = 0; i < 8; i++) {
+      const x = Math.floor(hash2(i, 61, s) * (TP - 2)), y = Math.floor(hash2(i, 63, s) * (TP - 2));
+      P(x, y, shade(c, 30)); P(x + 1, y, shade(c, 18)); P(x, y + 1, shade(c, -20));
+    }
+    for (let i = 0; i < 4; i++) {
+      let x = Math.floor(hash2(i, 71, s) * TP), y = Math.floor(hash2(i, 73, s) * TP);
+      for (let k = 0; k < 7; k++) {
+        P(x, y, shade(c, -26));
+        y = Math.max(0, Math.min(TPM, y + 1));
+        x = Math.max(0, Math.min(TPM, x + (hash2(x, y, s + 2) > 0.5 ? 1 : -1)));
+      }
+    }
+  },
   stone(s, c) {
     noiseTile(s, c, 9, 0.06);
+    /* 矿物闪点：稀疏亮点让石头在光下有「颗粒」而不是一片灰。 */
+    for (let i = 0; i < 14; i++)
+      P(Math.floor(hash2(i, 91, s) * TP), Math.floor(hash2(i, 93, s) * TP), shade(c, 26));
     /* 裂纹：走 10 步、并且「走一步补一格邻边」，让线宽约 1.5 像素 ——
      * 单像素线在 32 分辨率下会被 NEAREST 放大成断续的点，看着像脏点。 */
     for (let i = 0; i < 5; i++) {
@@ -125,14 +143,27 @@ export const TILE_GEN = {
       }
     }
   },
-  sand: (s, c) => noiseTile(s, c, 11, 0.04),
+  sand(s, c) {
+    /* 沙子：细噪点 + 几道缓坡波纹。纯噪点在 32 分辨率下像水泥，
+     * 波纹才让它看起来是「被风吹过的沙」。 */
+    noiseTile(s, c, 10, 0.04);
+    for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++) {
+      const w = Math.sin(x * 0.42 + y * 0.16 + s) * 5;
+      if (w > 2.2) P(x, y, shade(c, 12));
+      else if (w < -2.6) P(x, y, shade(c, -8));
+    }
+  },
   clay: (s, c) => noiseTile(s, c, 7, 0.03),
   quartz: (s, c) => noiseTile(s, c, 5, 0.02),
   snow(s, c) {
+    /* 雪：暗部略偏蓝 + 冰晶闪点 + 底边压蓝，避免整块死白。 */
     for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++) {
       const d = (hash2(x, y, s) - 0.5) * 10;
       P(x, y, [c[0] + d, c[1] + d, c[2] + d * 0.6]);   // 暗部略偏蓝
     }
+    for (let i = 0; i < 16; i++)
+      P(Math.floor(hash2(i, 31, s) * TP), Math.floor(hash2(i, 37, s) * TP), [255, 255, 255]);
+    for (let x = 0; x < TP; x++) P(x, TPM, [c[0] - 14, c[1] - 10, c[2] - 2]);
   },
   sandstone_top: (s, c) => noiseTile(s, c, 6, 0.03),
   sandstone_side(s, c) {
@@ -240,8 +271,11 @@ export const TILE_GEN = {
     }
   },
   ice(s, c) {
-    for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++)
-      P(x, y, shade(c, (hash2(x, y, s) - 0.5) * 14));
+    for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++) {
+      const g = (x + y) / (TP * 2);
+      P(x, y, shade(c, (hash2(x, y, s) - 0.5) * 14 + (g < 0.5 ? 8 : -6)));
+    }
+    for (let i = 4; i < 20; i++) { P(i, i - 2, shade(c, 40)); P(i + 1, i - 2, shade(c, 24)); }   // 斜向高光
     for (let i = 0; i < 4; i++) {                            // 裂纹
       let x = Math.floor(hash2(i, 7, s) * TP);
       for (let y = 0; y < TP; y++) {
@@ -251,20 +285,30 @@ export const TILE_GEN = {
     }
   },
   obsidian(s, c) {
-    noiseTile(s, c, 9, 0.05);
-    for (let i = 0; i < 18; i++) {                           // 紫点
-      const x = Math.floor(hash2(i, 5, s) * TP), y = Math.floor(hash2(i, 6, s) * TP);
-      P(x, y, [86 + hash2(i, 7, s) * 60, 58, 130]);
+    /* 黑曜石：近黑底 + 几道紫色反光 + 零星亮屑。 */
+    noiseTile(s, c, 8, 0.05);
+    for (let i = 0; i < 5; i++) {
+      const x0 = Math.floor(hash2(i, 5, s) * TP);
+      for (let y = 0; y < TP; y++) {
+        const x = x0 + Math.floor(Math.sin(y * 0.35 + i) * 3);
+        if (x >= 0 && x < TP) P(x, y, [86 + hash2(i, y, s) * 70, 58, 140]);
+      }
     }
+    for (let i = 0; i < 10; i++)
+      P(Math.floor(hash2(i, 15, s) * TP), Math.floor(hash2(i, 17, s) * TP), shade(c, 24));
   },
   glowstone(s, c) {
+    /* 萤石：暗底 + 一块块菱形晶簇（上半受光、下半压暗）。 */
     for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++)
       P(x, y, shade(c, -28 + hash2(x, y, s) * TP));
-    for (let i = 0; i < 12; i++) {                           // 亮斑
-      const cx = hash2(i, 11, s) * TP, cy = hash2(i, 13, s) * TP, r = 2.8 + hash2(i, 17, s) * 3.6;
-      for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++) {
-        const dx = x - cx, dy = y - cy;
-        if (dx * dx + dy * dy < r * r) P(x, y, [255, 238, 168]);
+    for (let i = 0; i < 9; i++) {
+      const cx = Math.floor(hash2(i, 11, s) * TP), cy = Math.floor(hash2(i, 13, s) * TP);
+      const r = 2 + hash2(i, 17, s) * 3;
+      for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) {
+        if (Math.abs(dx) + Math.abs(dy) > r) continue;
+        const px = cx + dx, py = cy + dy;
+        if (px < 0 || py < 0 || px >= TP || py >= TP) continue;
+        P(px, py, (dx + dy <= 0) ? [255, 244, 190] : [246, 208, 96]);
       }
     }
   },
@@ -354,45 +398,109 @@ export const TILE_GEN = {
   wool_yellow: (s, c) => woolTile(s, c),
   wool_green: (s, c) => woolTile(s, c),
   wool_black: (s, c) => woolTile(s, c),
-  mob_pig: (s, c) => furTile(s, c, 16, 26),
+  mob_pig: (s, c) => {
+    /* 猪皮：细毛 + 背部一条更深的鬃毛带 + 稀疏泥点。
+     * 只用 furTile 会显得「一块均匀的粉」，加了泥点才有在泥里打滚的猪味。 */
+    furTile(s, c, 16, 24);
+    for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++)
+      if (hash2(x >> 2, y >> 3, s + 41) > 0.74) P(x, y, shade(c, -16));
+    for (let i = 0; i < 7; i++) {
+      const x = Math.floor(hash2(i, 12, s) * (TP - 2)), y = Math.floor(hash2(i, 15, s) * (TP - 2));
+      P(x, y, [150, 118, 92]); P(x + 1, y, [160, 128, 100]);
+    }
+  },
   mob_pig_snout: (s, c) => {
-    furTile(s, c, 10, 20);
-    for (let i = 10; i < 22; i++) { P(i, 14, shade(c, -70)); P(i, 18, shade(c, -70)); }
+    /* 鼻盘：外圈受光、内圈压暗，两个鼻孔画成 2×2 的深色椭圆。 */
+    furTile(s, c, 8, 14);
+    for (let x = 4; x < 28; x++) { P(x, 5, shade(c, 20)); P(x, 26, shade(c, -26)); }
+    for (const ex of [9, 20]) {
+      for (let y = 13; y <= 18; y++) for (let x = ex; x <= ex + 3; x++) P(x, y, shade(c, -80));
+      P(ex, 13, shade(c, -34)); P(ex + 1, 13, shade(c, -34));
+    }
   },
   mob_sheep_wool: (s, c) => {
+    /* 羊毛：2×2 成团的卷毛 + 正弦交叉的卷曲纹，再点几处深沟。
+     * 比纯噪点更像「一团一团堆起来的毛」。 */
     for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++) {
-      const g = hash2(x >> 2, y >> 2, s);              // 卷毛：成块的团
-      P(x, y, shade(c, (g - 0.5) * 30 + (hash2(x, y, s + 2) - 0.5) * 8));
+      const g = hash2(x >> 2, y >> 2, s);
+      const curl = Math.sin((x + g * 6) * 0.9) * Math.cos((y - g * 6) * 0.9);
+      P(x, y, shade(c, (g - 0.5) * 26 + curl * 10 + (hash2(x, y, s + 2) - 0.5) * 8));
+    }
+    for (let i = 0; i < 18; i++) {
+      const x = Math.floor(hash2(i, 71, s) * (TP - 1)), y = Math.floor(hash2(i, 73, s) * TP);
+      P(x, y, shade(c, -32)); P(x + 1, y, shade(c, -22));
     }
   },
   mob_sheep_face: (s, c) => {
-    furTile(s, c, 10, 18);
+    /* 羊脸：顶部一圈羊毛刘海（和身体同色），下方是浅色长脸。
+     * 眼睛画成竖长条并点一颗高光，才有「温顺」的表情。 */
+    furTile(s, c, 10, 16);
+    const wool = TILE_COLOR['mob_sheep_wool'] || [232, 232, 226];
+    for (let x = 0; x < TP; x++) {
+      const h = 4 + Math.floor(hash2(x, 5, s) * 5);
+      for (let y = 0; y < h; y++) P(x, y, shade(wool, (hash2(x, y, s) - 0.5) * 22));
+    }
     const eye = TILE_COLOR['mob_eye'] || [24, 20, 22];
-    for (let x = 6; x <= 11; x++) { P(x, 12, eye); P(x, 13, eye); P(x, 14, eye); P(x, 15, eye); }
-    for (let x = 20; x <= 25; x++) { P(x, 12, eye); P(x, 13, eye); P(x, 14, eye); P(x, 15, eye); }
-    for (let x = 12; x <= 19; x++) { P(x, 20, shade(c, -60)); P(x, 21, shade(c, -46)); P(x, 22, shade(c, -66)); }
+    for (let x = 6; x <= 11; x++) for (let y = 13; y <= 17; y++) P(x, y, eye);
+    for (let x = 20; x <= 25; x++) for (let y = 13; y <= 17; y++) P(x, y, eye);
+    P(6, 13, [214, 214, 214]); P(20, 13, [214, 214, 214]);
+    for (let x = 11; x <= 20; x++) { P(x, 23, shade(c, -58)); P(x, 24, shade(c, -40)); }
   },
-  mob_chicken: (s, c) => furTile(s, c, 8, 14),
+  mob_chicken: (s, c) => {
+    /* 鸡羽毛：细毛底 + 一层层向下弯的羽片弧线。
+     * 均匀噪点会让鸡看起来像一块白布，弧线才有「羽毛叠着羽毛」的结构。 */
+    furTile(s, c, 8, 12);
+    for (let row = 0; row < 5; row++) {
+      const y0 = row * 6 + 3;
+      for (let x = 0; x < TP; x++) {
+        const scallop = Math.floor(Math.sin((x + row * 3) * 0.8) * 1.6);
+        P(x, y0 + scallop, shade(c, -24));
+        P(x, y0 + scallop + 1, shade(c, -10));
+      }
+    }
+  },
   mob_chicken_beak: (s, c) => {
-    furTile(s, c, 8, 14);
-    for (let x = 8; x < 24; x++) for (let y = 12; y < 20; y++) P(x, y, shade(c, x % 2 ? -22 : 8));
+    /* 喙 / 鸡爪共用这张：整块暖橙，上亮下暗，中间一道分缝。 */
+    for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++)
+      P(x, y, shade(c, (y < TPH ? 16 : -12) + (hash2(x, y, s) - 0.5) * 10));
+    for (let x = 4; x < TP - 4; x++) P(x, TPH, shade(c, -40));
   },
   mob_zombie_skin: (s, c) => {
-    furTile(s, c, 14, 20);
+    /* 腐烂的皮肤：腐斑（成块的暗绿） + 深陷的眼窝 + 咧到耳根的嘴。
+     * 眼窝下方再压一道阴影，脸才有「凹进去」的立体感。 */
+    furTile(s, c, 12, 16);
+    for (let i = 0; i < 9; i++) {
+      const x = Math.floor(hash2(i, 31, s) * (TP - 2)), y = Math.floor(hash2(i, 37, s) * (TP - 2));
+      const r = 1 + hash2(i, 41, s) * 2;
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++)
+        if (dx * dx + dy * dy <= r * r) P(x + dx, y + dy, shade(c, -30));
+    }
     const eye = TILE_COLOR['mob_eye'] || [20, 18, 20];
     for (let x = 6; x <= 11; x++) for (let y = 10; y <= 15; y++) P(x, y, eye);
     for (let x = 20; x <= 25; x++) for (let y = 10; y <= 15; y++) P(x, y, eye);
-    for (let x = 10; x <= 21; x++) P(x, 24, shade(c, -66));   // 咧开的嘴
+    for (let x = 5; x <= 12; x++) P(x, 16, shade(c, -40));
+    for (let x = 19; x <= 26; x++) P(x, 16, shade(c, -40));
+    for (let x = 10; x <= 21; x++) P(x, 24, shade(c, -66));
   },
   mob_zombie_shirt: (s, c) => {
+    /* 破衬衫：布纹 + 几处露肉的破洞 + 领口 + 中缝。 */
     for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++)
       P(x, y, shade(c, (hash2(x >> 2, y >> 2, s) - 0.5) * 22 + (hash2(x, y, s) - 0.5) * 8));
+    for (let i = 0; i < 7; i++) {
+      const x = Math.floor(hash2(i, 51, s) * (TP - 2)), y = Math.floor(hash2(i, 53, s) * (TP - 2));
+      for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) P(x + dx, y + dy, shade(c, -52));
+    }
+    for (let x = 8; x < 24; x++) P(x, 0, shade(c, -26));
     for (let y = 0; y < TP; y++) P(15, y, shade(c, -40)), P(16, y, shade(c, -40));
   },
   mob_zombie_pants: (s, c) => {
+    /* 裤腿：竖纹 + 中缝 + 下摆被撕开的锯齿。 */
     for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++)
       P(x, y, shade(c, (hash2(x >> 2, y >> 1, s) - 0.5) * 18 + (hash2(x, y, s) - 0.5) * 7));
     for (let y = 0; y < TP; y++) P(16, y, shade(c, -34));
+    for (let x = 0; x < TP; x++) if (hash2(x, 9, s) > 0.45) {
+      P(x, TPM, shade(c, -30)); P(x, TPM - 1, shade(c, -20));
+    }
   },
   mob_eye: (s, c) => { for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++) P(x, y, c); },
   mob_leg: (s, c) => furTile(s, c, 12, 18),
@@ -430,15 +538,21 @@ export const TILE_GEN = {
   bot_eye: (s, c) => {
     for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++) P(x, y, c);
   },
-  /* 村民：棕色粗布长袍，布纹比兽毛更「直」 */
+  /* 村民：棕色粗布长袍，布纹比兽毛更「直」，腰上一条深色布带 */
   mob_villager_robe: (s, c) => {
     for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++) {
       const weave = (hash2(x, Math.floor(y / 6), s) - 0.5) * 12;
       P(x, y, shade(c, weave + (hash2(x, y, s + 11) - 0.5) * 10));
     }
-    for (let y = 0; y < TP; y++) P(TPH - 1, y, shade(c, -26)), P(TPH, y, shade(c, -26));  // 前襟
+    // 腰带
+    for (let y = 17; y <= 21; y++) for (let x = 0; x < TP; x++)
+      P(x, y, shade([120, 84, 48], (hash2(x, y, s) - 0.5) * 10));
+    // 前襟
+    for (let y = 0; y < TP; y++) P(TPH - 1, y, shade(c, -26)), P(TPH, y, shade(c, -26));
+    // 布褶
+    for (let i = 0; i < 5; i++) { const x = 3 + i * 6; for (let y = 22; y < TP; y++) P(x, y, shade(c, -16)); }
   },
-  /* 村民的脸：大鼻子 + 连眉 + 平直的一字嘴 */
+  /* 村民的脸：大鼻子 + 连眉 + 平直的一字嘴 + 额头皱纹 */
   mob_villager_face: (s, c) => {
     for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++)
       P(x, y, shade(c, (hash2(x >> 1, y >> 1, s) - 0.5) * 16 + (hash2(x, y, s) - 0.5) * 8));
@@ -449,6 +563,8 @@ export const TILE_GEN = {
     for (let x = 20; x <= 27; x++) P(x, 11, shade(c, -58));
     for (let x = 13; x <= 18; x++) for (let y = 17; y <= 25; y++) P(x, y, shade(c, 16));  // 大鼻子
     for (let x = 11; x <= 20; x++) P(x, 28, shade(c, -50));   // 一字嘴
+    for (let x = 8; x <= 23; x++) if (hash2(x, 3, s) > 0.45) P(x, 6, shade(c, -24));     // 额纹
+    for (let y = 18; y <= 22; y++) { P(11, y, shade(c, -20)); P(20, y, shade(c, -20)); } // 法令纹
   },
 
   /* ---------------- 傀儡：铁 / 石 / 雪 ----------------
@@ -538,16 +654,18 @@ export const TILE_GEN = {
    * 腿是细方块，靠「数量」而不是形状取胜 —— 8 条腿的 voxel 蜘蛛远远看去
    * 就已经能认出来。眼睛只画在头胸那一格（mob_spider_eye）上。 */
   mob_spider: (s, c) => {
+    /* 蜘蛛：深褐近黑的刚毛 + 三道体节横带 + 背中线。
+     * 横带是「有节」的关键 —— 没有它，八条腿的盒子看着像一块毛毡。 */
     for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++) {
       const bristle = hash2(x, Math.floor(y / 3), s) > 0.72 ? 15 : 0;   // 刚毛
       P(x, y, shade(c, bristle + (hash2(x, y, s + 3) - 0.5) * 16));
     }
+    for (const by of [6, 14, 22]) for (let x = 0; x < TP; x++) P(x, by, shade(c, -22));
     for (let y = 0; y < TP; y++) { P(TPH - 1, y, shade(c, 16)); P(TPH, y, shade(c, 16)); }
   },
   mob_spider_eye: (s, c) => {
-    /* 底 = 深褐（跟头胸同色系），上面点三簇亮红眼睛 ——
-     * 旧写法整格底就是红的、眼睛只比底亮一档（224,70,54 vs 196,62,50），
-     * 拍出来是一块看不出结构的红板。改成「暗底 + 高亮红眼」才像蜘蛛的脸。 */
+    /* 底 = 深褐（跟头胸同色系），上面点三簇亮红眼睛。
+     * 暗底 + 高亮红眼才像蜘蛛的脸；整块红板是踩过的坑。 */
     for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++)
       P(x, y, shade(c, (hash2(x, y, s) - 0.5) * 14));
     const glow = [238, 66, 46];
@@ -556,14 +674,17 @@ export const TILE_GEN = {
         const edge = (dx === 0 || dx === 3 || dy === 0 || dy === 4);
         P(ex + dx, 11 + dy, shade(glow, edge ? -34 : (hash2(ex, dy, s) - 0.5) * 18));
       }
+    // 两侧两颗小副眼
+    for (const ex of [2, 27]) { P(ex, 8, glow); P(ex, 9, glow); P(ex + 1, 8, glow); }
   },
   /* ---------------- 苦力怕：苔绿杂斑 + 经典黑脸 ----------------
-   * 杂斑用 2×2 降采样的 hash（比逐像素噪点「脏」得更像 MC 的噪点质感），
+   * 杂斑用 2×2 降采样的 hash，再叠一层竖向暗纹 —— 比纯噪点更像「苔藓爬满皮肤」。
    * 脸谱是死坐标：方眼、竖鼻、两边下垂的嘴 —— 辨识度全靠它。 */
   mob_creeper: (s, c) => {
     for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++) {
       const patch = hash2(x >> 2, y >> 2, s + 21);
-      P(x, y, shade(c, (patch - 0.5) * 34 + (hash2(x, y, s) - 0.5) * 10));
+      const streak = hash2(x >> 3, y, s + 33) > 0.78 ? -14 : 0;
+      P(x, y, shade(c, (patch - 0.5) * 34 + streak + (hash2(x, y, s) - 0.5) * 10));
     }
   },
   mob_creeper_face: (s, c) => {
@@ -579,9 +700,13 @@ export const TILE_GEN = {
    * 身体和僵尸一样是「骨头色人形」，但更高更瘦（1.85 格）、没有皮肤色块，
    * 远看就是一副会走路的骨架。 */
   mob_skeleton: (s, c) => {
-    for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++) {
-      const seam = (hash2(Math.floor(x / 8), Math.floor(y / 8), s) - 0.5) * 16;
-      P(x, y, shade(c, seam + (hash2(x, y, s + 6) - 0.5) * 8));
+    /* 白骨：骨缝底 + 一道道横向肋骨（亮棱压着暗缝）。
+     * 之前只有竖缝，看着像一根白柱子；加了肋骨才认得出是骨架。 */
+    for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++)
+      P(x, y, shade(c, (hash2(Math.floor(x / 8), Math.floor(y / 8), s) - 0.5) * 16 + (hash2(x, y, s + 6) - 0.5) * 8));
+    for (const ry of [8, 13, 18, 23, 28]) {
+      for (let x = 2; x < TP - 2; x++) P(x, ry, shade(c, -26));
+      for (let x = 2; x < TP - 2; x++) P(x, ry + 1, shade(c, 14));
     }
     for (let y = 0; y < TP; y++) { P(TPH - 1, y, shade(c, -24)); P(TPH, y, shade(c, -24)); }
   },
@@ -602,6 +727,14 @@ export const TILE_GEN = {
       const core = hash2(x >> 2, y >> 2, s + 33);
       P(x, y, shade(c, (core - 0.5) * 40 + (hash2(x, y, s) - 0.5) * 12));
     }
+    // 内部气泡
+    for (let i = 0; i < 6; i++) {
+      const x = 3 + Math.floor(hash2(i, 21, s) * (TP - 6)), y = 3 + Math.floor(hash2(i, 23, s) * (TP - 6));
+      const r = 1 + hash2(i, 27, s) * 1.6;
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++)
+        if (dx * dx + dy * dy <= r * r) P(x + dx, y + dy, shade(c, 28));
+    }
+    // 左上高光带（果冻感的关键）
     for (let y = 4; y < 14; y++) for (let x = 5; x < 16; x++)
       if (hash2(x, y, s + 7) > 0.55) P(x, y, shade(c, 34));
   },
@@ -619,22 +752,41 @@ export const TILE_GEN = {
    * 凋灵   = 深灰石体 + 三头黑脸；
    * 远古守卫 = 青蓝石甲 + 金色发光眼。 */
   mob_dragon: (s, c) => {
-    noiseTile(s, c, 6, 0.04);
-    for (let i = 0; i < 14; i++) {
-      const x = Math.floor(hash2(i, 3, s) * TP), y = Math.floor(hash2(i, 7, s) * TP);
-      P(x, y, shade(c, -40));
+    /* 末影龙：菱形鳞片铺满 + 零星紫光点。鳞片比噪点更像「龙皮」。 */
+    noiseTile(s, c, 6, 0.03);
+    for (let y = 0; y < TP; y += 6) for (let x = 0; x < TP; x += 6) {
+      const ox = (Math.floor(y / 6) % 2) * 3;
+      for (let dy = 0; dy < 5; dy++) for (let dx = 0; dx < 5; dx++) {
+        if (dx + dy < 2 || dx + dy > 6) continue;
+        const px = x + dx + ox, py = y + dy;
+        if (px >= TP || py >= TP) continue;
+        P(px, py, shade(c, (dx === 0 || dy === 0) ? 22 : (hash2(px, py, s) - 0.5) * 10 - 8));
+      }
     }
+    for (let i = 0; i < 10; i++)
+      P(Math.floor(hash2(i, 3, s) * TP), Math.floor(hash2(i, 7, s) * TP), shade(c, 40));
   },
   mob_dragon_eye: (s, c) => {
     for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++) P(x, y, shade(c, -20));
     for (let y = 10; y <= 21; y++) for (let x = 10; x <= 21; x++) P(x, y, c);
     for (let y = 14; y <= 17; y++) for (let x = 14; x <= 17; x++) P(x, y, shade(c, 60));
+    // 竖瞳
+    for (let y = 11; y <= 20; y++) { P(15, y, shade(c, -90)); P(16, y, shade(c, -90)); }
   },
   mob_wither: (s, c) => {
+    /* 凋灵：深灰石体 + 发光裂纹（裂纹用亮灰，像内部有东西在烧）。 */
     noiseTile(s, c, 5, 0.03);
+    for (let i = 0; i < 6; i++) {
+      let x = Math.floor(hash2(i, 11, s) * TP), y = Math.floor(hash2(i, 13, s) * TP);
+      for (let k = 0; k < 12; k++) {
+        P(x, y, shade(c, 34));
+        x = Math.max(0, Math.min(TPM, x + (hash2(x, y, s + 3) > 0.5 ? 1 : -1)));
+        y = Math.max(0, Math.min(TPM, y + (hash2(x, y, s + 4) > 0.6 ? 1 : 0)));
+      }
+    }
     for (let y = 0; y < TP; y++)
       if (hash2(y, 11, s) > 0.5)
-        for (let x = 0; x < TP; x++) P(x, y, shade(c, -22));
+        for (let x = 0; x < TP; x++) P(x, y, shade(c, -18));
   },
   mob_wither_face: (s, c) => {
     for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++) P(x, y, shade(c, -50));
@@ -644,14 +796,21 @@ export const TILE_GEN = {
     for (let y = 18; y <= 22; y++) for (let x = 13; x <= 18; x++) P(x, y, ink);
   },
   mob_guardian: (s, c) => {
+    /* 远古守卫：青蓝石甲 + 甲片分割线 + 四颗铆钉。 */
     noiseTile(s, c, 5, 0.03);
-    for (let y = 0; y < TP; y += 4)
-      for (let x = 0; x < TP; x++) P(x, y, shade(c, -18));
+    for (let x = 0; x < TP; x++) { P(x, 8, shade(c, -26)); P(x, 16, shade(c, -26)); P(x, 24, shade(c, -26)); }
+    for (let y = 0; y < TP; y++) { P(8, y, shade(c, -18)); P(24, y, shade(c, -18)); }
+    for (const rx of [4, 27]) for (const ry of [4, 12, 20, 28]) {
+      P(rx, ry, shade(c, 40)); P(rx, ry + 1, shade(c, -20));
+    }
   },
   mob_guardian_face: (s, c) => {
     for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++) P(x, y, c);
     for (let y = 10; y <= 21; y++) for (let x = 10; x <= 21; x++) P(x, y, shade(c, 80));
     for (let y = 14; y <= 17; y++) for (let x = 14; x <= 17; x++) P(x, y, shade(c, -40));
+    // 眼框
+    for (let x = 8; x <= 23; x++) { P(x, 9, shade(c, -50)); P(x, 22, shade(c, -50)); }
+    for (let y = 9; y <= 22; y++) { P(9, y, shade(c, -50)); P(22, y, shade(c, -50)); }
   },
 
   /* ---------------- 异界地形方块 ----------------
@@ -1277,6 +1436,72 @@ export function eggIconTile(s, c) {
   PQ(6, 3, lite); PQ(5, 5, lite);                        // 高光补两点
 }
 
+/* ---------------- 药水 / 空瓶图标 ----------------
+ * 16×16 逻辑格（PQ 体系）。瓶形固定，靠液体颜色区分 12 种药水；
+ * 治疗加一个白十字、负面药水加两颗上浮气泡 —— 「一眼分辨」不只依赖色相，
+ * 色弱玩家也能靠形状认出来。空瓶只画玻璃与瓶塞，瓶身半透明。
+ *
+ * mode：'normal' | 'heal' | 'debuff' | 'empty' */
+export function potionIconTile(s, c, mode) {
+  const glass = [214, 232, 242]
+  const glassDk = [152, 180, 196]
+  const empty = mode === 'empty'
+  /* 逻辑格绘制（IU×IU 像素块 + 可选透明度）。瓶形必须走逻辑格：
+   * 直接用 P() 逐像素画 0..15 的坐标，瓶子只会出现在格子左上 16×16，
+   * 实际显示时缩成四分之一大、右下三块空白。 */
+  const Q = (x, y, col, a) => {
+    for (let dy = 0; dy < IU; dy++) for (let dx = 0; dx < IU; dx++)
+      P(x * IU + dx, y * IU + dy, col, a)
+  }
+  /* 逐行描述瓶形：[y, x0, x1, 部位]。宽度 4→2→4→6→8 逐级外扩再收口：
+   * 瓶塞 4 宽、细颈 2 宽、瓶肩过渡、瓶身 8 宽、圆底 —— 修长的玻璃瓶，
+   * 而不是「一个彩色方块」。 */
+  const rows = [
+    [2, 6, 9, 'cork'], [3, 6, 9, 'cork'],
+    [4, 7, 8, 'neck'], [5, 7, 8, 'neck'],
+    [6, 6, 9, 'rim'],
+    [7, 5, 10, 'shoulder'],
+    [8, 4, 11, 'body'], [9, 4, 11, 'body'], [10, 4, 11, 'body'],
+    [11, 4, 11, 'body'], [12, 4, 11, 'body'],
+    [13, 5, 10, 'body'], [14, 6, 9, 'body'],
+  ]
+  for (const [y, x0, x1, part] of rows) {
+    for (let x = x0; x <= x1; x++) {
+      const edge = x === x0 || x === x1
+      if (part === 'cork') { Q(x, y, edge ? [108, 78, 44] : [156, 118, 72]); continue }
+      if (part === 'neck' || part === 'rim') { Q(x, y, edge ? glassDk : glass, 0.75); continue }
+      /* 瓶身：最外一列是玻璃边 —— 先铺液体暗色再叠一层半透明玻璃，
+       * 这样整只瓶子仍以液体色为主调（纯灰玻璃边会把瓶子洗成白色），
+       * 同时保留「玻璃壳」的高光边。空瓶走淡蓝白实心，否则 0.3 透明
+       * 叠在物品栏背景上几乎看不见轮廓。 */
+      if (edge) {
+        if (empty) { Q(x, y, [178, 198, 214]); continue }
+        Q(x, y, shade(c, -34)); Q(x, y, glassDk, 0.42); continue
+      }
+      if (empty) { Q(x, y, [202, 220, 232]); continue }
+      if (part === 'shoulder') { Q(x, y, glass, 0.42); continue }   // 瓶肩以上留空腔
+      let col = c
+      if (y === 8) col = shade(c, 34)            // 液面
+      else if (x <= 5) col = shade(c, 18)        // 左侧受光
+      else if (y >= 13) col = shade(c, -16)      // 瓶底压暗
+      Q(x, y, col)
+    }
+  }
+  if (!empty) for (let x = 5; x <= 10; x++) Q(x, 8, shade(c, 58))        // 液面亮线
+  for (let i = 0; i < 4; i++) Q(5 + i, 9 + i, [255, 255, 255], empty ? 0.5 : 0.38)  // 玻璃斜向反光
+  Q(5, 9, [255, 255, 255], empty ? 0.85 : 0.72)                          // 高光点
+  if (mode === 'heal') {                                     // 白十字（4×3，居中于液体区）
+    for (let y = 9; y <= 11; y++) { Q(7, y, [255, 250, 250]); Q(8, y, [255, 250, 250]) }
+    for (let x = 6; x <= 9; x++) Q(x, 10, [255, 250, 250])
+  }
+  if (mode === 'debuff') {                                   // 上浮气泡
+    for (const [bx, by] of [[6, 11], [9, 9], [7, 13]]) {
+      Q(bx, by, [38, 42, 38], 0.70); Q(bx + 1, by, [38, 42, 38], 0.50)
+    }
+  }
+  if (!empty && mode !== 'debuff') { Q(9, 12, shade(c, 40), 0.8); Q(6, 13, shade(c, 30), 0.7) }
+}
+
 export function itemTile(name, s, c) {
   const dark = shade(c, -60), lite = shade(c, 44);
   /* --- 工具 / 武器 / 弹药：按 item_<kind>_<tier> 前缀分派 --- */
@@ -1296,6 +1521,13 @@ export function itemTile(name, s, c) {
   if (name === 'item_blink') return blinkIcon(s, c);
   /* --- 刷怪蛋：卵形壳。必须单开一支，否则掉进下面「肉」兜底、13 枚全像猪排。 --- */
   if (/^item_egg_\w+$/.test(name)) return eggIconTile(s, c);
+  /* --- 药水 / 空瓶：瓶子形状，靠液体色 + 记号区分 --- */
+  if (name === 'item_bottle') return potionIconTile(s, c, 'empty');
+  if (/^item_potion_/.test(name)) {
+    const key = name.slice(12);                       // 'item_potion_' 长 12
+    const mode = key === 'heal' ? 'heal' : (key === 'poison' || key === 'slow') ? 'debuff' : 'normal';
+    return potionIconTile(s, c, mode);
+  }
   /* --- 傀儡核心：一枚带「发光眼」的圆角方块 ---
    * 不加这一支的话会掉进下面的「肉」兜底分支，三枚核心全长得像猪排。 */
   const gm = /^item_golem_(\w+)$/.exec(name);

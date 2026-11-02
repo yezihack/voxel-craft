@@ -19,6 +19,12 @@ export const ui = reactive({
   air: 10, maxAir: 10,
   airVisible: false,           // 只有真的在水下才显示氧气行
 
+  /* ---- 药水 ----
+   * 正在生效的效果，供 HUD 画圆环倒计时。
+   * 每项 { key, color:[r,g,b], kind:'buff'|'debuff', pct:0..1 }。
+   * 这里只放「界面要画什么」，真实计时住在 potions.js。 */
+  potions: [],
+
   /* ---- 背包 / 合成 ---- */
   mode: 0,                     // MODE.*
   selected: 0,                 // 手持格号

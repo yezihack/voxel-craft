@@ -14,6 +14,7 @@ import { VIEW_CX, VIEW_CZ, anchorGX, anchorGZ, buildChunk, chunks, shiftChunks }
 import { MOB_TYPES, fireArrow, updateArrows, updateMobs } from './mobs.js'
 import { player, raycast, updatePhysics } from './player.js'
 import { portalIdInPlayer, switchDim } from './portal.js'
+import { potionNightVision } from './potions.js'
 import { tickAutoSave } from './save.js'
 import { AMBIENT, FOG_FAR, FOG_HEIGHT, FOG_NEAR, SHADER_T, SKY, atlasTex, composite, drawArrows, drawBotDrops, drawBots, drawCarts, drawChunkBlend, drawChunkOpaque, drawHandView, drawMobs, ensureFbos, lineBuf, postOK, runBloom, sceneFbo, updateSkyColor, uploadChunk } from './post.js'
 import { canvas, gl, locLine, locMain, progLine, progMain } from './renderer.js'
@@ -21,7 +22,7 @@ import { drawSky } from './sky.js'
 import { applyStickInput } from './stick.js'
 import { cancelDig, digProgress, heldId, invCount, invTake, updateDig, updateSurvival } from './survival.js'
 import { P } from './textures.js'
-import { syncHurt, syncVitals } from './uiSync.js'
+import { syncHurt, syncPotions, syncVitals } from './uiSync.js'
 import { updateNameTags } from './nametags.js'
 import { ui } from './uiState.js'
 
@@ -245,7 +246,10 @@ export function frame(now) {
   gl.uniform1f(locMain.uFogFar, FOG_FAR);
   gl.uniform1f(locMain.uFogHeight, FOG_HEIGHT);   // 每个维度自己的起雾高度
   gl.uniform1f(locMain.uTime, SHADER_T());
-  gl.uniform1f(locMain.uAmbient, AMBIENT);
+  /* 夜视药水：把环境光抬到「能看清但不至于像白天」的下限。
+   * 只改 uAmbient，不动天空色 / 雾色 —— 画面基调还是夜，
+   * 只是地形细节不再黑成一片。 */
+  gl.uniform1f(locMain.uAmbient, potionNightVision() ? Math.max(AMBIENT, 0.86) : AMBIENT);
   gl.uniform1f(locMain.uTexel, TEXEL);
   gl.uniform4f(locMain.uWaterRect, WATER_RECT[0], WATER_RECT[1], WATER_RECT[2], WATER_RECT[3]);
   gl.uniform4f(locMain.uLavaRect, LAVA_RECT[0], LAVA_RECT[1], LAVA_RECT[2], LAVA_RECT[3]);
@@ -333,7 +337,7 @@ export function frame(now) {
   if (bowCharge > 0) ui.bowPct = +(bowCharge * 100).toFixed(1);
 
   // 生存数值每帧都便宜（只有十几个 SVG），但没必要 —— 每 6 帧刷一次足够跟手
-  if (frames % 6 === 0) { syncVitals(); syncHurt(); }
+  if (frames % 6 === 0) { syncVitals(); syncHurt(); syncPotions(); }
 
   fpsAcc += dt; fpsN++;
   if (fpsAcc > 0.5) { fps = Math.round(fpsN / fpsAcc); fpsAcc = 0; fpsN = 0; }

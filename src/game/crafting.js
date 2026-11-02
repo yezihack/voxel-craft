@@ -68,6 +68,13 @@ export function craftKeyTable() {
     d: I.DRAGON_SCALE,   // 龙鳞
     t: I.WITHER_BONE,    // 凋灵骨
     u: I.GUARDIAN_CORE,  // 守卫核心
+    /* 药水配方的容器与特征材料（见「药水」配方段）。
+     * 26 个大写已占满，只能继续用未占用的小写：a / j / c / g。
+     *   a = 空瓶（ampoule），j = 苹果，c = 胡萝卜（物品），g = 萤石。 */
+    a: I.BOTTLE,         // 空瓶
+    j: 200,              // 苹果（item 200）
+    c: 201,              // 胡萝卜（item 201，注意不是方块 I.CARROT）
+    g: I.GLOW,           // 萤石
   };
 }
 export const CRAFT_KEY = craftKeyTable();
@@ -289,6 +296,30 @@ export const RECIPES = [
    * 铁盾要 6 铁矿，挡得更多（68% vs 50%），是中期升级。 */
   { out: I.SHIELD_WOOD, n: 1, grid: ['PJP', 'PPP', ' P '] },
   { out: I.SHIELD_IRON, n: 1, grid: ['RJR', 'RRR', ' R '] },
+
+  /* ---------------- 药水 ----------------
+   * 先做容器，再「空瓶 + 一味特征材料」调出各种药水。
+   * 形状统一是 1×2（瓶左料右），12 种只差材料 —— 和刷怪蛋 / 维度核心同一个套路，
+   * 玩家学会一次就懂全部。
+   *
+   * 材料尽量取「主世界可得」且与效果有联想：
+   *   苹果 → 治疗、红石 → 迅捷、胡萝卜 → 跳跃、火药 → 力量、
+   *   钻石 → 抗性、金矿 → 再生、萤石 → 夜视、冰块 → 水肺、
+   *   雪块 → 抗火、煤 → 急迫、蛛眼 → 剧毒、腐肉 → 缓慢。
+   * ⚠ 12 种材料两两不同，不会出现「同形同料两条配方」导致后面那条永远合不出来。 */
+  { out: I.BOTTLE,        n: 1, grid: ['G G', ' G '] },   // 3 玻璃 → 空瓶
+  { out: I.POTION_HEAL,     n: 1, grid: ['aj'] },
+  { out: I.POTION_SPEED,    n: 1, grid: ['aT'] },
+  { out: I.POTION_JUMP,     n: 1, grid: ['ac'] },
+  { out: I.POTION_STRENGTH, n: 1, grid: ['ap'] },
+  { out: I.POTION_RESIST,   n: 1, grid: ['aY'] },
+  { out: I.POTION_REGEN,    n: 1, grid: ['aO'] },
+  { out: I.POTION_NIGHT,    n: 1, grid: ['ag'] },
+  { out: I.POTION_WATER,    n: 1, grid: ['aI'] },
+  { out: I.POTION_FIRE,     n: 1, grid: ['aN'] },
+  { out: I.POTION_HASTE,    n: 1, grid: ['aK'] },
+  { out: I.POTION_POISON,   n: 1, grid: ['ay'] },
+  { out: I.POTION_SLOW,     n: 1, grid: ['az'] },
 ];
 
 /* 把配方网格规整成 3×3 的 id 矩阵（不足补 0） */

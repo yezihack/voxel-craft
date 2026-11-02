@@ -10,6 +10,7 @@ import { getEffective, isLiquid, isSolid, setBlock } from './generate.js'
 import { keys } from './input.js'
 import { FACES } from './mesher.js'
 import { moveBodyAxis, player } from './player.js'
+import { potionStrengthBonus } from './potions.js'
 import { heal, heldId, hurt, inv, invAdd } from './survival.js'
 import { shade } from './textures.js'
 
@@ -1318,7 +1319,9 @@ export function tryAttackMob(dt, blockDist = Infinity) {
    * 只挂在玩家挥击这一路：bots.js 也调 damageMob，但 AI 玩家没有附魔台，
    * 让它们跟着回血会变成「打不死的邻居」。 */
   const leech = enchantLevel(heldId(), 'leech');
-  damageMob(hit.mob, attackDamage(), dir[0], dir[2]);
+  /* 力量药水：直接加在「武器伤害 + 锋利」之上。
+   * 只挂玩家挥击这一路 —— AI 玩家没有药水，让它们跟着加会变成不死的邻居。 */
+  damageMob(hit.mob, attackDamage() + potionStrengthBonus(), dir[0], dir[2]);
   if (leech && hit.mob.dead) heal(leech * 2);
   return true;
 }

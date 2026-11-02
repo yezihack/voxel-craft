@@ -31,6 +31,12 @@ export function setEnchantReader(fn) { enchantLevel = fn; }
 export let enchantSummaryOf = () => '';
 export function setEnchantSummaryReader(fn) { enchantSummaryOf = fn; }
 
+/* 药水「急迫」的挖掘倍率。同样是注入：potions.js 要 import 本模块来装这个
+ * 读取器，本模块不能反向 import 它（会成环）。默认 1 = 没有药水加成。
+ * ⚠ 和 enchant 一样，potions.js 必须被求值一次，否则药水对挖掘静默无效。 */
+export let potionHaste = () => 1;
+export function setPotionHasteReader(fn) { potionHaste = fn; }
+
 /* 生物档案表。定义在 mobs.js（第 6301 行那段），而 mobs.js 的顶层要读本模块的
  * SUMMON_OF / EGG_OF / JUMP_V —— 所以这里同样只能「被注入」，不能反向 import。
  * 只有 itemTip() 会用到它，而 itemTip 是界面渲染时调的，那时引擎早已就绪。 */
@@ -516,6 +522,14 @@ Object.assign(I, {
   HELM_STARFALL: 281, CHEST_STARFALL: 282, LEGS_STARFALL: 283, BOOTS_STARFALL: 284,
   /* 盾牌：按住右键格挡，按 block 比例减伤 */
   SHIELD_WOOD: 285, SHIELD_IRON: 286,
+  /* ---------------- 药水 ----------------
+   * 空瓶是药水的容器；12 种药水覆盖「回血 / 位移 / 战斗 / 生存 / 工具 / 负面」
+   * 六类，每种都有独立效果（见 potions.js），不是换色。
+   * 数值全部走 I.*，别在逻辑里裸写 288。 */
+  BOTTLE: 287,
+  POTION_HEAL: 288, POTION_SPEED: 289, POTION_JUMP: 290, POTION_STRENGTH: 291,
+  POTION_RESIST: 292, POTION_REGEN: 293, POTION_NIGHT: 294, POTION_WATER: 295,
+  POTION_FIRE: 296, POTION_HASTE: 297, POTION_POISON: 298, POTION_SLOW: 299,
 });
 
 /* 物品表（非方块）：食物等，右键使用。
@@ -677,6 +691,26 @@ export const ITEMS = {
    * 加一套「盾会碎」的账只会让格挡变成一件要算计的苦差事。 */
   285: { name:'木盾', n:'盾', color:[150,112, 72], tex:'shield_wood', shield:{ block:0.50 } },
   286: { name:'铁盾', n:'盾', color:[214,214,218], tex:'shield_iron', shield:{ block:0.68 } },
+
+  /* ---------------- 药水 ----------------
+   * potion 字段是唯一的元数据来源（和 tool / summon / core / staff 同构）：
+   * 值必须是 POTION_DEFS 的键（见 potions.js）。效果数值全在那边，
+   * 这里只写「叫什么、什么色、哪张图、提示语」，避免两处各写一份数值。
+   * tip 直接给 itemTip 用 —— config.js 不能 import potions.js（会成环），
+   * 所以提示语写死在物品上。 */
+  287: { name:'空瓶',       n:'瓶', color:[186, 214, 224], tex:'bottle',        tip:'合成药水的容器' },
+  288: { name:'治疗药水',   n:'药', color:[236,  96, 110], tex:'potion_heal',     potion:'heal',     tip:'立即回复 6 点生命' },
+  289: { name:'迅捷药水',   n:'药', color:[126, 214, 236], tex:'potion_speed',    potion:'speed',    tip:'45 秒内移动速度 +45%' },
+  290: { name:'跳跃药水',   n:'药', color:[150, 232, 120], tex:'potion_jump',     potion:'jump',     tip:'40 秒内跳得更高' },
+  291: { name:'力量药水',   n:'药', color:[236, 132,  76], tex:'potion_strength', potion:'strength', tip:'40 秒内近战伤害 +3' },
+  292: { name:'抗性药水',   n:'药', color:[198, 208, 226], tex:'potion_resist',   potion:'resist',   tip:'40 秒内受到伤害 -35%' },
+  293: { name:'再生药水',   n:'药', color:[240, 130, 170], tex:'potion_regen',    potion:'regen',    tip:'25 秒内每秒回复 1 点生命' },
+  294: { name:'夜视药水',   n:'药', color:[248, 220, 108], tex:'potion_night',    potion:'night',    tip:'90 秒内黑暗中也看得清' },
+  295: { name:'水肺药水',   n:'药', color:[ 92, 168, 236], tex:'potion_water',    potion:'water',    tip:'90 秒内水下不消耗氧气' },
+  296: { name:'抗火药水',   n:'药', color:[240, 150,  70], tex:'potion_fire',     potion:'fire',     tip:'60 秒内免疫岩浆灼烧' },
+  297: { name:'急迫药水',   n:'药', color:[214, 200, 120], tex:'potion_haste',    potion:'haste',    tip:'45 秒内挖掘速度 ×2' },
+  298: { name:'剧毒药水',   n:'药', color:[136, 196,  92], tex:'potion_poison',   potion:'poison',   tip:'负面：14 秒内每秒损失 1 点生命' },
+  299: { name:'缓慢药水',   n:'药', color:[130, 140, 170], tex:'potion_slow',     potion:'slow',     tip:'负面：16 秒内移动速度 -40%' },
 };
 for (const k in ITEMS) ITEMS[k].id = +k;
 /* 维度号 → 核心物品 id。建在 ITEMS 之后（要读 core 字段），
@@ -809,12 +843,15 @@ export const TOOL_GOOD = { pick: 'stone', axe: 'wood', shovel: 'dirt' };
  * 而星陨镐 ×16 配效率 III 是 ×40 —— 加算的话好工具上刻词条几乎看不出差别，
  * 「越好的装备越值得刻」这条动机就断了。 */
 export function toolSpeedOn(id) {
+  /* 急迫药水对「空手 / 用错工具」同样生效 —— 它加速的是挥动，不是材质对口。
+   * 所以先取倍率，三个 return 都乘上它。 */
+  const haste = potionHaste();
   const held = readHeldId();
   const t = TOOL_OF[held];
-  if (!t) return 1;
-  if (BLOCK_MAT[id] !== TOOL_GOOD[t.kind]) return 1;
+  if (!t) return haste;
+  if (BLOCK_MAT[id] !== TOOL_GOOD[t.kind]) return haste;
   const eff = enchantLevel(held, 'eff');
-  return TIER_SPEED[t.tier] * (1 + 0.5 * eff);
+  return TIER_SPEED[t.tier] * (1 + 0.5 * eff) * haste;
 }
 /* 当前手持物的攻击伤害。
  * 锋利只对剑 / 斧生效 —— 判定交给 enchant.js 的 fits，这里只按等级加数值；
@@ -846,6 +883,10 @@ export function itemTip(id) {
     return `（按住右键格挡 · 挡掉 ${Math.round(b * 100)}% 伤害）` + enchTip();
   }
   if (d.staff) return `（右键发射魔法弹 · 伤害 ${d.staff.dmg} · 冷却 ${d.staff.cd}s）` + enchTip();
+  /* 药水：数值与持续时间写在 potions.js，这里只显示物品自带的 tip，
+   * 免得两处各维护一份数值。空瓶也走 d.tip 这一支。 */
+  if (d.potion) return `（右键饮用 · ${d.tip || ''}）`;
+  if (d.tip) return `（${d.tip}）`;
   if (d.food) return `（食物，右键吃，+${d.food} 饥饿）`;
   if (id === I.BOW) return '（按住右键蓄力，松手射出）' + enchTip();
   if (id === I.ARROW) return '（弓的弹药）';

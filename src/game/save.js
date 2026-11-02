@@ -21,6 +21,7 @@ import { chunks, initChunks } from './mesher.js'
 import { setWorldTime, worldTime } from './mobs.js'
 import { player } from './player.js'
 import { dimSpawn } from './portal.js'
+import { potionRestore, potionSnapshot } from './potions.js'
 import { HOTBAR_N, SLOT_N, inv, invSlots } from './survival.js'
 import {
   MODE, SEED, dim, flatWorld, mode, selected,
@@ -92,6 +93,9 @@ export function snapshot() {
     /* 附魔铭刻：{ 物品id: { 词条键: 等级 } }。是「世界状态」而不是「玩家状态」
      * （换了世界也该跟着走），但存档本来就是世界 + 玩家一体的，放这一层最省事。 */
     ench: enchantSnapshot(),
+    /* 正在生效的药水：[key, 剩余秒]。读档后继续倒计时，
+     * 而不是「存一次档就把药水续满」—— 后者等于无限药水。 */
+    potions: potionSnapshot(),
     selected,
     edits: editsToArray(),
   }
@@ -255,6 +259,12 @@ export function applySave(d) {
    * 校验（词条键存在 / 适用该装备 / 等级在 1..max）在 enchant.js 里做：
    * 存档是可以被玩家手改的文件，一条 sharp:999 就能把攻击力变成 999。 */
   enchantRestore(d.ench)
+
+  /* ---- 7c. 药水 ----
+   * 同样无条件调用：老档没有 potions 字段 → potionRestore(undefined) 清空，
+   * 而不是「保留上一次读档喝剩的药水」。逐条校验在 potions.js 里做
+   * （键存在 / 非即时型 / 时长夹到 dur）。 */
+  potionRestore(d.potions)
 
   /* ---- 8. 模式 ---- */
   setModeState(wantMode)

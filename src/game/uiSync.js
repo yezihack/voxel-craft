@@ -7,6 +7,7 @@
  * 所以这里不再有 syncHud —— 生命 / 饥饿 / 氧气仍由 Vitals 用心形与鸡腿表达，
  * 这些是图形而不是文字，不占视野。 */
 import { player } from './player.js'
+import { POTION_DEFS, potionActive } from './potions.js'
 import { ui } from './uiState.js'
 
 export function syncVitals() {
@@ -19,4 +20,21 @@ export function syncVitals() {
 
 export function syncHurt() {
   ui.hurt = player.hurtFlash > 0
+}
+
+/* 药水 HUD：只搬「画一个圆环需要的最小字段」。
+ * 每次同步都换一个新数组 —— Vue 的 diff 才会看到变化；
+ * 数组最多十来个元素，这点开销远小于每帧写 DOM。 */
+export function syncPotions() {
+  ui.potions = potionActive().map((e) => {
+    const d = POTION_DEFS[e.key]
+    return {
+      key: e.key,
+      name: d.name,
+      color: d.color,
+      kind: d.kind,
+      pct: d.dur > 0 ? Math.max(0, Math.min(1, e.t / d.dur)) : 0,
+      t: e.t,
+    }
+  })
 }
