@@ -221,6 +221,15 @@
   说明这些文件压根没部署上去，不是路径写错。`dist/` 里有不等于线上有。
 - **`npx vite preview ... &` 起的后台进程会被回收**，探针直接
   `ERR_CONNECTION_REFUSED`。用受管后台任务，别用 shell 的 `&`。
+- **线上是 Cloudflare Pages，两个反直觉行为（2026-11-04）**：
+  ① `/intro.html` 返回 **308 → `/intro`**（Pretty URLs 去扩展名），跟随重定向后 200；
+  ② **HEAD 拿不到 `Content-Length`**（`demo.mp4` 走分块传输，而 `.webp` 反而有），
+  带 `Range` 的请求才回 200 + 长度。要读体积就得 HEAD 失败后回退 Range 并立刻
+  `body.cancel()` 掐断。
+- **工作区可能有并行会话的未提交代码**（本仓库真实发生过：另一个会话在写箱子系统）。
+  部署前先 `git status`，若有别人的改动，别直接 build —— 用 `git worktree add`
+  到仓库外单独检出当前提交、junction 一份 `node_modules`、在那里 build 再部署。
+  删 junction 只能用 .NET `Directory.Delete(path,false)`，`rm -rf` 会删进真实依赖。
 
 ## 提交风格
 - 中文 commit message，祈使句，概括根因 + 新增内容。
