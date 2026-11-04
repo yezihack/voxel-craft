@@ -5,7 +5,6 @@ import { doBreak, doPlace } from './actions.js'
 import { blip } from './audio.js'
 import { REACH_ATTACK } from './config.js'
 import { camEye } from './loop.js'
-import { clamp } from './math.js'
 import { MOB_TYPES, raycastMob } from './mobs.js'
 import { player } from './player.js'
 import { cycleMode, loadNow, onEscape, saveNow, selectSlot, toggleBag } from './uiActions.js'
@@ -104,16 +103,20 @@ window.addEventListener('keyup', (e) => {
 /* --------------------------- 鼠标 / 触摸视角 --------------------------- */
 export const SENS = 0.0022;
 
-/* 俯仰的上下界。原来卡在 ±(π/2 - 0.02)，差 1.15° 就顶住 —— 手指滑到那儿
- * 画面不再动，继续滑也不积累，手感就是「卡死」。
- * 现在只留 0.0005 rad（0.03°）的余量：纯粹是防 sin/cos 在正好 ±π/2 时的
- * 数值退化（那会让视图矩阵退化成不可逆，画面翻过来）。
- * 换句话说，除了「正好垂直」这一点，低头和抬头已经没有限制。 */
-const PITCH_LIM = Math.PI / 2 - 0.0005;
+/* 俯仰不设边界：抬头 / 低头可以一直转过去，做完整的 360° 翻转。
+ * 旧版卡在 ±(π/2 - 0.0005)，理由是「正好 ±90° 会让视图矩阵退化」—— 实测
+ * 不成立：M4.view 的 right / up / dir 在任意 pitch 下都是单位正交基
+ * （up = right × dir，|up| 恒为 1）。越过 90° 后画面上下颠倒只是连续旋转的
+ * 自然结果，射线用的也是同一组 sin/cos，准星与画面对得上。
+ * yaw / pitch 一律折回 [-π, π)：等价角折叠而不是边界 —— 方向照样能无限转，
+ * 只是避免长时间转圈累积成大数后 sin/cos 掉精度。非有限输入归零，别让 NaN
+ * 顺着 player 写进存档（旧 clamp 会把 ±Inf 夹回边界，这里不能倒退）。 */
+const TAU = Math.PI * 2;
+const wrapAngle = (a) => Number.isFinite(a) ? a - TAU * Math.floor((a + Math.PI) / TAU) : 0;
 
 export function addLook(dx, dy) {
-  player.yaw -= dx * SENS;
-  player.pitch = clamp(player.pitch - dy * SENS, -PITCH_LIM, PITCH_LIM);
+  player.yaw = wrapAngle(player.yaw - dx * SENS);
+  player.pitch = wrapAngle(player.pitch - dy * SENS);
 }
 
 document.addEventListener('mousemove', (e) => {
@@ -190,16 +193,25 @@ canvas.addEventListener('contextmenu', (e) => e.preventDefault());
  * 想低头看脚下要滑大半屏，既能到位又留得住精度。 */
 export const TOUCH_LOOK = 1.15;
 
-/* 单次 touchmove 最多算这么多像素。
- * 手指滑得快时浏览器会合并事件，一次 delta 可能上百像素；
- * 更糟的是 touchend 被系统手势吞掉时，下一次 delta 会是「当前位置 - 很久以前的位置」。
- * 不封顶的话视角会瞬间被甩到边界 —— 这就是「一低头就跳到最抬头」的真相。 */
-const TOUCH_STEP_MAX = 90;
-
+/* 单次 touchmove 不再封顶：delta 有多大就转多少。
+ * 旧版用 90px 截断是为了防「基准过期 → 一次几百像素的跳变」，但跳变的根因是
+ * lookId 没复位，现在已由 touchstart 的活手指检查 + endLook 的「页面上没手指就
+ * 无条件复位」兜底解决，不必再牺牲快速甩动的手感。 */
 let lookId = null, lookX = 0, lookY = 0;
 
 canvas.addEventListener('touchstart', (e) => {
   if (!running) return;
+  /* 新按下的手指**复用了**正在接管视角的 identifier：旧的那根必然已经抬起
+   * （浏览器不会给同一 id 同时发两次 touchstart），只是它的 touchend 被吞了。
+   * 这时必须刷新基准 —— 封顶删掉之后，拿「新落点 - 几百像素前的旧基准」
+   * 做第一次 touchmove 会把视角一次甩飞。 */
+  if (lookId !== null) {
+    for (const t of e.changedTouches) {
+      if (t.identifier !== lookId) continue;
+      lookX = t.clientX; lookY = t.clientY;
+      return;
+    }
+  }
   /* 已经有手指在接管视角就忽略第二根 —— 但先确认那根手指还活着：
    * 它的 touchend 万一没送到，lookId 会一直挂着，之后每次按下都被挡掉，
    * 基准永远停在旧位置。 */
@@ -216,10 +228,7 @@ canvas.addEventListener('touchstart', (e) => {
 canvas.addEventListener('touchmove', (e) => {
   for (const t of e.changedTouches) {
     if (t.identifier !== lookId) continue;
-    let dx = t.clientX - lookX, dy = t.clientY - lookY;
-    const d = Math.hypot(dx, dy);
-    if (d > TOUCH_STEP_MAX) { dx = dx / d * TOUCH_STEP_MAX; dy = dy / d * TOUCH_STEP_MAX; }
-    addLook(dx * TOUCH_LOOK, dy * TOUCH_LOOK);
+    addLook((t.clientX - lookX) * TOUCH_LOOK, (t.clientY - lookY) * TOUCH_LOOK);
     lookX = t.clientX; lookY = t.clientY;
     e.preventDefault();            // 阻止页面跟着手指滚动 / 下拉刷新
   }
