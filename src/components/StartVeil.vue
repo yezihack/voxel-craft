@@ -117,6 +117,13 @@ async function onFile(e) {
         <input ref="fileEl" type="file" accept=".json,application/json" hidden @change="onFile">
       </div>
 
+      <!-- 宣传页入口：访客最先想知道的「这游戏长什么样」。
+       * 跳走之前先静默存一次 —— 自动存档是 60 秒一次，不能保证此刻最新。 -->
+      <a class="promolink" href="/intro.html" @click="engine.saveNow(false)">
+        <span>✦ 宣传页 · 实机演示</span>
+        <span class="savemeta">录屏、截图与素材库</span>
+      </a>
+
       <div class="hint" @click.self="tryStart" v-html="ui.veilHint" />
     </div>
   </div>
@@ -281,6 +288,35 @@ async function onFile(e) {
 
 .iobtn .savemeta {
   font-size: 10px
+}
+
+/* 宣传页入口：比存档操作更轻，用主题绿的细描边 —— 它是「了解」而不是「操作」 */
+.promolink {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 9px 14px;
+  border-radius: 11px;
+  text-decoration: none;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, .84);
+  border: 1.5px solid rgba(126, 200, 80, .26);
+  background: rgba(126, 200, 80, .06);
+  transition: background .12s, border-color .12s;
+}
+
+.promolink:hover {
+  background: rgba(126, 200, 80, .13);
+  border-color: rgba(126, 200, 80, .5)
+}
+
+.promolink .savemeta {
+  font-size: 10px;
+  font-weight: 400;
+  opacity: .72
 }
 
 /* 删档：只放一个图标，红色描边，悬停才变亮 —— 危险动作不该太显眼 */
