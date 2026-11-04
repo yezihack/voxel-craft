@@ -30,7 +30,13 @@ page.on('pageerror', (e) => errs.push('pageerror: ' + e.message))
 page.on('console', (m) => { if (m.type() === 'error') errs.push('console: ' + m.text()) })
 
 await page.goto(BASE + '/intro.html', { waitUntil: 'load' })
-await page.waitForTimeout(1200)
+/* 体积一栏是页面异步去探的（HEAD，必要时退回 Range），线上要跑几百毫秒。
+ * 固定等 1200ms 在本地够、走公网就不够 —— 等条件成立，别等钟。 */
+await page.waitForFunction(() => {
+  const els = [...document.querySelectorAll('[data-size]')]
+  return els.length > 0 && els.every((e) => e.textContent.trim() !== '—')
+}, { timeout: 12000 }).catch(() => { /* 超时就让下面的断言去报 */ })
+await page.waitForTimeout(300)
 
 /* ---------- A. 素材库结构 ---------- */
 const cards = await page.$$eval('#media .mcard', (els) =>

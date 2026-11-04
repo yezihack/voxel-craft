@@ -839,20 +839,37 @@ if (window.gsap && window.ScrollTrigger){
   });
 
   /* 体积一栏现读 Content-Length，不写死数字：素材换了体积跟着变，
-   * 读不到就保留占位「—」，不至于显示一个错的数。 */
+   * 读不到就保留占位「—」，不至于显示一个错的数。
+   *
+   * 但有些 CDN 对 HEAD 走分块传输、**不发 Content-Length**（实测线上
+   * demo.mp4 就是这样，而 .webp 反而有）。所以补一条回退：带 Range 取一字节，
+   * 拿到头就 cancel() 掐断 —— 不能让它真把 4.6 MB 下完。 */
   var sizeEls = document.querySelectorAll('[data-size]');
   if (sizeEls.length && window.fetch){
     var fmt = function(n){
       return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB'
                           : Math.max(1, Math.round(n / 1024)) + ' KB';
     };
+    var probeLen = function(url){
+      return fetch(url, { method: 'HEAD' }).then(function(r){
+        var len = r.headers.get('content-length');
+        if (len) return +len;
+        return fetch(url, { headers: { Range: 'bytes=0-0' } }).then(function(r2){
+          var cr = r2.headers.get('content-range');       // "bytes 0-0/4843026"
+          var m = cr && /\/(\d+)\s*$/.exec(cr);
+          if (r2.body && r2.body.cancel) r2.body.cancel().catch(function(){});
+          if (m) return +m[1];
+          var l2 = r2.headers.get('content-length');
+          return l2 ? +l2 : 0;
+        });
+      }).catch(function(){ return 0; });
+    };
     var loadSizes = function(){
       for (var j = 0; j < sizeEls.length; j++){
         (function(el){
-          fetch(el.getAttribute('data-size'), { method: 'HEAD' })
-            .then(function(r){ return r.headers.get('content-length'); })
-            .then(function(len){ if (len) el.textContent = fmt(+len); })
-            .catch(function(){ /* 跨域或离线：保持占位 */ });
+          probeLen(el.getAttribute('data-size')).then(function(n){
+            if (n > 0) el.textContent = fmt(n);
+          });
         })(sizeEls[j]);
       }
     };
