@@ -72,4 +72,5 @@
 - 线上特性：`/intro.html` 308 → `/intro`（Pretty URLs）；HEAD 拿不到 `Content-Length`（回退带 `Range` 请求后立刻 `body.cancel()`）。线上若是旧的 1209 字节 index.html 兜底，说明文件压根没部署上去。
 - `npx vite preview ... &` 会被回收（CONNECTION_REFUSED），用受管后台任务。后台交互式命令别接管道，用 `> file.log 2>&1`。playwright 的 ESM 不吃 NODE_PATH，要 `createRequire(PW_ROOT + '/x.js')`。
 - 部署前 `git status` 查并行会话改动：有别人的在写就用 `git worktree add` 到仓库外检出当前提交、junction 一份 `node_modules` 再 build；删 junction 只能用 .NET `Directory.Delete(path,false)`，`rm -rf` 会删进真实依赖。
-- 验收脚本 `.scratch/cf/verify.mjs` / `.scratch/promo-gallery/probe.mjs`：标题 / WebGL / 零控制台报错。
+- 验收脚本 `.scratch/cf/verify.mjs` / `.scratch/promo-gallery/probe.mjs`：标题 / WebGL / 零控制台报错。Playwright 缓存浏览器版本与脚本期望不符时，用 `CHROME_PATH` 指向系统 Chrome。
+- **GitHub 推送**：本机代理可能拒 `CONNECT github.com:443`（502），`git fetch/push` 与 SSH 全不通，但 `api.github.com` 通；代理端口会变，命令里用 `$https_proxy` 别硬编码。此时用 `GH_TOKEN="$(gh auth token)" node .scratch/gh-sync/push-via-api.mjs` 走 Git Database API 增量重建提交，SHA 可保持一致，最后才 PATCH main ref；详见 `.scratch/gh-sync/spec.md`。
