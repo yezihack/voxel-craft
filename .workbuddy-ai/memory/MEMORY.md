@@ -17,6 +17,8 @@
 - MOB_TYPES 用 flag 分派 AI：`boss` 分支必须放在 `if (D.hostile)` 之前；`fly:true` 在 mobPhysics 岩浆灼烧后、`wasGround` 前短路跳过重力，只做三轴 AABB；`!boss` 才参与距离回收。
 - 远程攻击复用骷髅 `shootArrowAt(foe:true)`。凋灵爆破只借 `explodeMob` 的球形破坏循环，**不能直接调**（会置 `dead` 自杀），伤害单独算。
 - 白天烧：`SUNBURN_TYPES` + `underOpenSky`（头顶扫到 H=64）+ 每 0.4s 重算 `m.skyT`，挂 mobPhysics 之后、dead 检查之前。渲染三态 tint 里燃烧判 `hurtFlash > 0.2`（底噪 0.12），否则绿通道被压到 0 变血块。
+- **1 格宽沟（squeeze）**：贴地探测「AABB 覆盖任一格实心就算站住」，w≥1 的生物会架成隐形桥。蜘蛛 / 大史莱姆挂 `squeeze:true` → 水平+贴地用 `Math.min(D.w/2, SQUEEZE_HW=0.4)`，竖直扫掠另用 `CENTER_HW=0.02`（否则擦到对岸被 moveBodyAxis 顶回地面）。`w` 仍是渲染 / 命中盒宽度，不动；小史莱姆 w=0.55 本就掉得进去，**别给它挂 squeeze**（会白白改掉它的竖直扫掠）。
+- 配套三件缺一不可：① 贴地吸附加 `m.y >= footY+1-GROUND_SNAP_TOL(0.06)` 禁止上拽，且**必须加 `D.squeeze` 守卫**，否则全局改掉其它生物的贴地手感；② `inShaft`（身体层两侧都实心）禁掉蜘蛛沟内爬墙，判据别加「两侧上方是空气」——只在沟口第一层成立，深沟第二层会被误判成走廊又爬回去；③ 贴地探测**不能**收成中心列，会让蜘蛛在沟口过早失足、被水平 AABB 推回岸上。1 格宽走廊里 `inShaft` 会误禁爬墙，属已知取舍。
 
 ## 贴图（textures.js）
 - 程序化贴图 = noiseTile 基础 + 覆盖层；`^item_egg_\w+$` 自动走 `eggIconTile`；boss 需登记 MOB_TILE_COLORS。

@@ -162,11 +162,19 @@ export const MOB_TYPES = {
    *   史莱姆  不走路只**弹跳**（hop），大史莱姆死亡时**分裂**成两只小的（split）
    * 共同点：都是夜间刷新（和僵尸同池，见 NIGHT_POOL），都被傀儡视为敌人。
    *
+   * `squeeze` = 能挤进 1 格宽的沟：物理半宽最多收到 SQUEEZE_HW（见 mobPhysics）。
+   * `w` 仍是视觉 / 命中盒宽度，不动 —— 蜘蛛 1.10、大史莱姆 1.00 本来就比
+   * 一格还宽，照原宽度做 AABB 会同时架在沟两岸，永远掉不下去。
+   * 小史莱姆 w=0.55（半宽 0.275）比 1 格还窄，AABB 根本搭不起两岸，
+   * 本来就掉得进去，不挂这个标记、物理原样不动，免得白白改到它的竖直扫掠。
+   *
    * ⚠ 新增字段（climb/fuse/ranged/hop/split）一律在读取处写 `|| 0` 兜底 ——
-   * 无头测试会拿裸对象直接调 mobPhysics / mobAI，缺字段算出 NaN 是静默的。 */
+   * 无头测试会拿裸对象直接调 mobPhysics / mobAI，缺字段算出 NaN 是静默的。
+   * `squeeze` 是布尔读法（undefined 自然为假），不需要兜底。 */
   spider: {
     name: '蜘蛛', hp: 16, speed: 3.4, w: 1.10, h: 0.90, hostile: true,
     dmg: 3, atkRange: 1.5, sight: 18, drop: I.SPIDER_EYE, dropN: 1, climb: true,
+    squeeze: true,
     parts: [
       { box: [0.72, 0.50, 0.85], at: [0, 0.48, 0.10], tex: 'mob_spider' },      // 头胸
       { box: [0.60, 0.54, 0.55], at: [0, 0.42, -0.50], tex: 'mob_spider' },     // 腹部
@@ -210,7 +218,7 @@ export const MOB_TYPES = {
   slime_large: {
     name: '史莱姆', hp: 8, speed: 2.2, w: 1.00, h: 1.00, hostile: true,
     dmg: 3, atkRange: 1.5, sight: 14, drop: I.SLIMEBALL, dropN: 1,
-    hop: { power: 1.2, cd: 0.85 }, split: 'slime_small', splitN: 2,
+    hop: { power: 1.2, cd: 0.85 }, split: 'slime_small', splitN: 2, squeeze: true,
     parts: [
       { box: [1.00, 1.00, 1.00], at: [0, 0.50, 0], tex: 'mob_slime' },
       { box: [0.52, 0.30, 0.10], at: [0, 0.60, 0.50], tex: 'mob_slime_face' },   // 脸贴在正前
@@ -455,6 +463,34 @@ export const MOB_HOP_V = JUMP_V * 0.9;
 /* 蜘蛛爬墙速度（格/秒）。比走路略慢 —— 爬墙是该快的场面，但不该比追人还快。 */
 export const SPIDER_CLIMB = 3.2;
 
+/* 「能挤进 1 格宽沟」的生物的碰撞半宽（见 MOB_TYPES.squeeze）。
+ *
+ * 为什么必须收窄到 < 0.5：贴地探测扫的是 AABB 覆盖的整片格子，「任意一格
+ * 是实心就算站住了」。蜘蛛 w=1.10（半宽 0.55）、大史莱姆 w=1.00（半宽 0.50）
+ * 跨过 1 格宽的沟时，AABB 从头到尾都压着两岸的实心块 —— 支撑恒为真，
+ * 永远进不了下落分支；就算强行判成失足，Y 轴扫掠也会撞到两岸把它顶回地面。
+ * 0.4 的半宽留出 0.1 格余量，让水平扫掠把它稳稳卡在沟列里（x ∈ [0.4, 0.6]）；
+ * 竖直扫掠另用 CENTER_HW，见下。
+ *
+ * 只改物理：`w` 仍是渲染与命中盒宽度，蜘蛛腿 / 史莱姆边缘轻微嵌进沟壁是可接受的。 */
+export const SQUEEZE_HW = 0.4;
+
+/* 竖直扫掠用的「中心列」半宽。
+ *
+ * 贴地探测沿用原来的「AABB 覆盖的任一格实心就算站住」—— 这对刚体是对的：
+ * 只要还有一只脚搭在岸上就不该失足。收窄到 0.4 之后，整只脚都离开地面
+ * 恰好发生在重心进沟 0.4 格时，此时 AABB 已完整落在沟列里，水平扫掠不会
+ * 刮到沟壁（否则会被 moveBodyAxis 一把推回岸上，表现成「掉下去又被弹回来」）。
+ *
+ * 但 Y 轴扫掠必须只看中心列：一旦开始下落，AABB 稍微擦到对岸方块，
+ * moveBodyAxis 就会把整只生物顶回地面高度，等于凭空架了座桥。 */
+export const CENTER_HW = 0.02;
+
+/* 贴地吸附允许的最大下沉量。身体已经低于该格顶面超过这个值，说明是真的
+ * 在往下掉，不能再用吸附把它设回地面高度（见 mobPhysics 的「禁止上拽」）。
+ * 只对 squeeze 生物生效：其它生物的贴地行为保持原样，不改它们的既有手感。 */
+export const GROUND_SNAP_TOL = 0.06;
+
 /* ---------------- 白天见光就烧 ----------------
  * 僵尸 / 骷髅暴露在阳光下会持续掉血（经典设定）。
  * 判据是「头顶一路到世界顶没有实心方块」—— 躲在树荫、洞里、水下、玻璃顶下
@@ -499,7 +535,10 @@ function sunburnTick(m, dt) {
 
 export function mobPhysics(m, dt) {
   const D = MOB_TYPES[m.type];
-  const hw = D.w / 2;
+  /* squeeze 生物按更窄的碰撞箱参与物理，否则 1 格宽的沟会被 AABB 架成桥。
+   * 水平扫掠与贴地探测用 SQUEEZE_HW，只有竖直扫掠收成中心列。 */
+  const hw = D.squeeze ? Math.min(D.w / 2, SQUEEZE_HW) : D.w / 2;
+  const vertHW = D.squeeze ? CENTER_HW : hw;
   const feet = getEffective(Math.floor(m.x), Math.floor(m.y + 0.1), Math.floor(m.z));
   const inWater = feet === I.WATER;
   const hot = !!(BLOCKS[feet] && BLOCKS[feet].hot);
@@ -538,7 +577,13 @@ export function mobPhysics(m, dt) {
       for (let x = x0; x <= x1; x++)
         if (isSolid(getEffective(x, footY, z))) { grounded = true; break; }
 
-    if (grounded && m.vy <= 0.01) {
+    /* 吸附只负责消掉「站在地上」那 2 毫米的累积误差，不能把已经掉进沟里的
+     * squeeze 生物往上拽：AABB 一擦到对岸，grounded 就会重新为真，旧写法会
+     * 直接把 m.y 设回地面高度 —— 于是沟被当成平地跨了过去。
+     * 加 D.squeeze 守卫：这条只对收窄过碰撞箱的生物成立，其余生物一律沿用
+     * 原来的吸附，别把一次沟修复变成全局物理改动。 */
+    if (grounded && m.vy <= 0.01 &&
+        (!D.squeeze || m.y >= footY + 1 - GROUND_SNAP_TOL)) {
       m.y = footY + 1;                         // 精确贴合格子顶面，消掉累积误差
       m.vy = 0;
       m.onGround = true;
@@ -546,7 +591,7 @@ export function mobPhysics(m, dt) {
       m.vy -= G * dt;
       m.vy = Math.max(m.vy, -32);
       m.onGround = false;
-      moveBodyAxis(m, hw, D.h, 'y', m.vy * dt);
+      moveBodyAxis(m, vertHW, D.h, 'y', m.vy * dt);
     }
   }
   // 水平扫掠挂在 updateMobs 的调用顺序里：先水平后垂直，避免卡角
@@ -592,7 +637,18 @@ export function mobPhysics(m, dt) {
     const ax = Math.floor(m.x + dirX * (hw + 0.3));
     const az = Math.floor(m.z + dirZ * (hw + 0.3));
     const hy = Math.floor(m.y);
-    if (isSolid(getEffective(ax, hy + 1, az)) || (isSolid(getEffective(ax, hy, az)) && !m.onGround)) {
+    const cx = Math.floor(m.x), cz = Math.floor(m.z);
+    /* 1 格宽的沟里，身体这一层左右（或前后）都是实心 —— 这是「被夹在沟里」，
+     * 不是「面前有一堵墙」。不挡住的话蜘蛛刚掉半格就会顺着沟壁爬回地面，
+     * 沟等于白挖。站在墙外爬墙时只有一侧是墙，不会命中这条判据。
+     * ⚠ 判据不能加「两侧上方也是空气」：那只在沟口第一层成立，掉到第二层
+     * 之后两侧上方就是地表石头，会被误判成走廊，蜘蛛又能爬回去。 */
+    const solid = (x, y, z) => isSolid(getEffective(x, y, z));
+    const inShaft =
+      (solid(cx - 1, hy, cz) && solid(cx + 1, hy, cz)) ||
+      (solid(cx, hy, cz - 1) && solid(cx, hy, cz + 1));
+    if (!inShaft &&
+        (isSolid(getEffective(ax, hy + 1, az)) || (isSolid(getEffective(ax, hy, az)) && !m.onGround))) {
       moveBodyAxis(m, hw, D.h, 'y', SPIDER_CLIMB * dt);
       m.vy = 0;
       m.onGround = false;
