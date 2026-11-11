@@ -62,8 +62,16 @@
 | --- | --- | --- |
 | 纯逻辑 | `node .scratch/spell-craft/probe.mjs` | 10/10 通过：370 条全可达、无撞 key、覆盖英 / 拼、长词排除、跨行续摆、空档不硬拼 |
 | 真实 UI | `.scratch/spell-craft/ui-probe.mjs`（Playwright + 系统 Chrome） | 23/23 通过、零控制台报错：默认创造模式可见合成台、字母盘放字块、清空不造物、词表 370 条可筛选可自动摆料、结果格命中 APPLE 并完成课业、生存模式同样可用且不占背包账 |
-| 构建 | `npx vite build`（干净 worktree） | 通过 |
-| 线上 | 部署后 DOM 验收 | 见下 |
+| 构建 | `npx vite build`（干净 worktree，仅含 `62e8048`） | 111 modules，`index-*.js` 247.66 kB / gzip 94.53 kB；产物内 `spellBookEntries / pickSpellEntry / placeGlyph` 命中，`BOX_WOOD / chestOpen` 为 0 |
+| 线上 | `.scratch/spell-craft/online-probe.mjs`（触屏 context，纯 DOM） | 16/16 通过、零控制台报错，连续复跑两次一致 |
+
+线上探针刻意**不 import 页面模块**：生产 bundle 没有 `/src/game/*.js` 路径，本地那套「从 `performance.getEntriesByType('resource')` 捞真实模块 URL」的做法在线上不成立。改用触屏 context 还有两个好处：触屏有显式「背包」按钮（`.tb.sys`），不必依赖指针锁与 KeyE；顺带覆盖手机端。
+
+`v-show` 切换与 370 张词卡的首帧有竞态，点击前一律 `waitForSelector(..., { state: 'visible' })`，不用固定 sleep 赌时序 —— 第一版脚本就是在这里撞到 `element is not visible`。
+
+线上验收覆盖：默认模式可见合成台、26 键字母盘、370 条词表（英 275 / 拼 95）与双 tab、点词条自动摆 3 个字块、结果格命中 `one`、点结果格出现「拼出了」且清空、字母盘直接放字块、WebGL 正常。
+
+部署：干净 worktree 检出 `62e8048`、junction 主仓库 `node_modules` → `npx wrangler@3 pages deploy dist --project-name voxel-craft --branch=main` → `https://c1a662bb.voxel-craft-516.pages.dev`，生产别名 `https://voxel-craft-516.pages.dev/` 已指向新 bundle `main-D252izmm.js`。
 
 浏览器探针的两个既有坑仍然成立：改完代码必须重启 dev server（HMR 的 `?t=` 会给出第二个模块实例）；驱动一律 `import` 页面真实加载过的模块 URL，不能 `import('/src/engine.js')`（那是 noop 占位）。
 
