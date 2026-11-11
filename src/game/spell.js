@@ -11,7 +11,7 @@
  * 整段不碰 DOM / 不碰 GL，`readGlyphRow` 甚至不依赖 config（letterOf 可注入），
  * 所以能直接拉到 Node 里做无头断言。 */
 
-import { GLYPH_LETTER } from './config.js';
+import { GLYPH_BLOCK, GLYPH_LETTER } from './config.js';
 import { SPELL_TABLE, spellLookup } from '../data/curriculum/spellTable.js';
 
 /* 从 9 格合成台里读出一个字母序列。读不出来返回 null。
@@ -58,4 +58,39 @@ export function spellResult(slots, table) {
   const entries = spellMatch(letters, table);
   if (!entries) return null;
   return { letters, entries };
+}
+
+/* ---------------- 词表（拼写面板的书目） ----------------
+ * 「各种单词的选项」的数据来源：从 SPELL_TABLE 派生出一份可展示、可选中的清单。
+ *
+ * ⚠ 只列出**真的摆得进 3×3** 的词：超过 9 个字母（blackboard 等）按 ADR-0007
+ *   走 PICK 题型，列出来只会让玩家点了没反应。
+ * ⚠ 同一个 key 只取 arr[0]，与 craftResult / takeCraftResult 挑 entries[0] 的
+ *   口径一致 —— 否则 cat 这类 vocab/phonics 撞 key 的词会在书里出现两行，
+ *   点下去却拼出同一条，看着像 bug（工单 04 记录的 9 处撞 key）。
+ *
+ * 纯函数，不碰 DOM / 不碰 GL，可直接拉到 Node 里断言「列的每一条都拼得出来」。 */
+export const SPELL_MAX_LETTERS = 9;
+
+export function spellBookEntries() {
+  const out = [];
+  for (const [key, arr] of SPELL_TABLE) {
+    if (key.length < 1 || key.length > SPELL_MAX_LETTERS) continue;
+    if ([...key.toUpperCase()].some((ch) => !GLYPH_BLOCK[ch])) continue;
+    const e = arr[0];
+    out.push({
+      key,
+      letters: key.toUpperCase(),
+      id: e.id,
+      lang: e.lang,
+      kind: e.kind,
+      grade: e.grade | 0,
+      text: e.text,
+      gloss: e.gloss || '',
+      pinyin: e.pinyin || '',
+      topicName: e.topicName || '',
+      rhyme: e.rhyme || '',
+    });
+  }
+  return out;
 }

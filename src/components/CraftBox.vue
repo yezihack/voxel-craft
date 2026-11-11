@@ -1,12 +1,17 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { engine } from '../engine.js'
 import ItemIcon from './ui/ItemIcon.vue'
 import RecipeBook from './RecipeBook.vue'
+import SpellBook from './SpellBook.vue'
 
-/* 3×3 合成台 + 结果格 + 右边的配方书。只在生存模式显示。 */
+/* 3×3 合成台 + 字母盘 + 结果格 + 右边的配方书 / 词表。
+ * 两种模式都显示（见 BagPanel）；右边默认停在「词表」，因为拼单词 / 拼音
+ * 这个入口以前完全找不到，而配方书一键就能切回来。 */
 const slots = computed(() => (engine.craftSlots ? [...engine.craftSlots] : []))
 const result = computed(() => (engine.craftResult ? engine.craftResult() : null))
+const glyphs = computed(() => engine.GLYPH_PAD || 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''))
+const tab = ref('spell')
 
 const slotTitle = (id) => (id
   ? engine.defName(id) + '（点一下放回背包）'
@@ -26,38 +31,57 @@ const outTitle = computed(() => {
 <template>
   <div class="craftbox">
     <div class="craftleft">
-      <div class="craftgrid">
+      <div class="craftrow">
+        <div class="craftgrid">
+          <div
+            v-for="(id, i) in slots" :key="i" class="cslot" :class="{ filled: !!id }"
+            :title="slotTitle(id)" @click="engine.clearCraftSlot(i)"
+          >
+            <template v-if="id">
+              <ItemIcon :id="id" />
+              <span class="cnt">1</span>
+            </template>
+          </div>
+        </div>
+        <div class="craftarrow">➜</div>
         <div
-          v-for="(id, i) in slots" :key="i" class="cslot" :class="{ filled: !!id }"
-          :title="slotTitle(id)" @click="engine.clearCraftSlot(i)"
+          class="craftout" :class="{ can: !!result }" :title="outTitle"
+          @click="engine.takeCraftResult()"
         >
-          <template v-if="id">
-            <ItemIcon :id="id" />
-            <span class="cnt">1</span>
+          <template v-if="result && result.spell">
+            <span class="spellword">{{ result.spell.entries[0].text }}</span>
           </template>
+          <template v-else-if="result">
+            <ItemIcon :id="result.out" />
+            <span class="cnt">{{ result.n }}</span>
+          </template>
+          <span v-else class="none">?</span>
         </div>
       </div>
-      <div class="craftarrow">➜</div>
-      <div
-        class="craftout" :class="{ can: !!result }" :title="outTitle"
-        @click="engine.takeCraftResult()"
-      >
-        <template v-if="result && result.spell">
-          <span class="spellword">{{ result.spell.entries[0].text }}</span>
-        </template>
-        <template v-else-if="result">
-          <ItemIcon :id="result.out" />
-          <span class="cnt">{{ result.n }}</span>
-        </template>
-        <span v-else class="none">?</span>
+      <div class="glyphpad" title="点字母把字块摆进合成格；字块不占背包">
+        <button
+          v-for="ch in glyphs" :key="ch" class="gp" :data-ch="ch"
+          :title="'字块·' + ch" @click="engine.placeGlyph(ch)"
+        >{{ ch }}</button>
+        <button class="gpback" title="退掉最后一个字块" @click="engine.undoGlyph()">←</button>
       </div>
     </div>
     <div class="craftright">
       <div class="crafthead">
-        <span>配方书</span>
+        <div class="crafttabs">
+          <button
+            class="crafttab" :class="{ on: tab === 'spell' }" data-tab="spell"
+            @click="tab = 'spell'"
+          >词表 · 单词 / 拼音</button>
+          <button
+            class="crafttab" :class="{ on: tab === 'recipe' }" data-tab="recipe"
+            @click="tab = 'recipe'"
+          >配方书</button>
+        </div>
         <button class="craftfill" @click="engine.clearCraftAll()">清空合成格</button>
       </div>
-      <RecipeBook />
+      <SpellBook v-show="tab === 'spell'" />
+      <RecipeBook v-show="tab === 'recipe'" />
     </div>
   </div>
 </template>
@@ -72,9 +96,49 @@ const outTitle = computed(() => {
 
 .craftleft {
   display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 9px;
+  flex: 0 0 auto;
+}
+
+.craftrow {
+  display: flex;
   align-items: center;
   gap: 10px;
-  flex: 0 0 auto;
+}
+
+/* A–Z 字母盘：27 个按钮（26 字母 + 退一格）正好 9×3，
+ * 宽度跟上面的九宫格 + 箭头 + 结果格对齐，不额外撑宽面板。 */
+.glyphpad {
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  gap: 3px;
+}
+
+.glyphpad button {
+  height: 24px;
+  padding: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid rgba(236, 226, 200, .22);
+  background: rgba(236, 226, 200, .07);
+  color: var(--txt);
+  transition: border-color .1s, background .1s, transform .1s;
+}
+
+.glyphpad button:hover {
+  border-color: var(--accent);
+  background: rgba(67, 224, 255, .16);
+  transform: translateY(-1px);
+}
+
+.glyphpad .gpback {
+  color: var(--dim);
+  border-style: dashed;
 }
 
 .craftgrid {
@@ -192,6 +256,33 @@ const outTitle = computed(() => {
   letter-spacing: .6px;
   margin-bottom: 6px;
   white-space: nowrap;
+}
+
+.crafttabs {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+}
+
+.crafttab {
+  padding: 4px 9px;
+  border-radius: 7px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10.5px;
+  border: 1px solid rgba(255, 255, 255, .16);
+  background: rgba(255, 255, 255, .05);
+  color: var(--dim);
+}
+
+.crafttab.on {
+  border-color: var(--accent);
+  background: rgba(67, 224, 255, .12);
+  color: var(--txt);
+}
+
+.crafttab:hover {
+  color: var(--txt);
 }
 
 .craftfill {

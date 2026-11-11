@@ -8,7 +8,11 @@ import InventoryPanel from './InventoryPanel.vue'
 
 /* 方块库（创造）/ 背包（生存）。同一个面板，按模式换内容：
  *   生存 → 标题「背包」+ 合成台 + 盔甲栏 + 54 格背包
- *   创造 → 标题「方块库」+ 全部方块与物品
+ *   创造 → 标题「方块库」+ 合成台 + 全部方块与物品
+ *
+ * 合成台**两种模式都显示**：拼写课业用的字块是学习材料、不占背包账，
+ * 没理由只在生存模式给。原先 `v-if="surv"` 让默认的创造模式压根看不到
+ * 合成格，拼写功能完全不可达。
  * 盔甲栏只在生存模式出现：创造模式不吃伤害，穿甲没有任何可观测效果。 */
 const surv = computed(() => ui.mode === MODE.SURVIVAL)
 const title = computed(() => (surv.value ? '背包' : '方块库'))
@@ -20,7 +24,7 @@ const sub = computed(() => (engine.bagSubtitle ? engine.bagSubtitle() : ''))
     <div class="bagpanel">
       <h2>{{ title }}</h2>
       <div class="sub">{{ sub }}</div>
-      <CraftBox v-if="surv" />
+      <CraftBox />
       <ArmorPanel v-if="surv" />
       <InventoryPanel v-if="surv" />
       <BlockLibrary v-else />

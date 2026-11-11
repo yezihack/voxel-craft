@@ -3,7 +3,7 @@ import { reactive } from 'vue'
 /* 合成：3x3 配方匹配、配方书、自动摆料 —— 迁移自 voxel-craft.html 第 5920-6283 行 */
 
 import { MODE, mode } from './state.js'
-import { D, G, H, I, W, defName } from './config.js'
+import { D, G, H, I, W, defName, isGlyphBlock } from './config.js'
 import { keys } from './input.js'
 import { invAdd, invCount, invTake } from './survival.js'
 import { spellResult } from './spell.js'
@@ -426,12 +426,16 @@ export function craftResult() {
 /* 合成格内材料总数（判断「格子空不空」） */
 export const craftFilled = () => craftSlots.reduce((a, v) => a + (v ? 1 : 0), 0);
 
-/* 清空合成格 —— 材料退回背包（背包满也照样退，东西不会凭空消失）。 */
+/* 清空合成格 —— 材料退回背包（背包满也照样退，东西不会凭空消失）。
+ *
+ * ⚠ 字块例外：它是**学习材料，不占背包账**（拼写面板直接往合成台里供字块，
+ *   没从 inv 扣过）。退回去等于凭空造方块，生存模式还能拿去摆着玩。
+ *   判据统一走 config.isGlyphBlock，别在 UI 里各自记一套 id 范围。 */
 export function clearCraft(toInv = true) {
   for (let i = 0; i < CRAFT_N; i++) {
     const id = craftSlots[i];
     if (!id) continue;
-    if (toInv) invAdd(id, 1);
+    if (toInv && !isGlyphBlock(id)) invAdd(id, 1);
     craftSlots[i] = 0;
   }
 }
@@ -448,11 +452,12 @@ export function craftPlace(id, at = -1) {
   if (mode === MODE.SURVIVAL) invTake(id, 1);
   return true;
 }
-/* 清掉合成格里第 i 个，材料退回背包 */
+/* 清掉合成格里第 i 个，材料退回背包（字块不占背包账，见 clearCraft）。 */
 export function craftClearAt(i) {
   const id = craftSlots[i];
   if (!id) return false;
   craftSlots[i] = 0;
+  if (isGlyphBlock(id)) return true;
   invTake(id, 0);                    // 只是让 inv 保持一致（0 数量是空操作）
   invAdd(id, 1);
   return true;

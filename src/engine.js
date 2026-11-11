@@ -37,6 +37,8 @@ const NOT_READY_KEYS = [
   /* 附魔台面板虽然要进游戏才会打开，但模板里的按钮从第一帧就存在 ——
    * 漏了这几个键，面板一旦先渲染出来就会抛 `engine.closeEnchant is not a function`。 */
   'openEnchant', 'closeEnchant', 'enchantPickItem', 'enchantInscribe',
+  /* 拼写面板：字母盘 / 词表 / 退一格，开始面板第一帧就可能点到。 */
+  'placeGlyph', 'pickSpellEntry', 'undoGlyph',
 ]
 for (const k of NOT_READY_KEYS) {
   engine[k] = () => {

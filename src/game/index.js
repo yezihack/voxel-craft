@@ -43,3 +43,9 @@ export { defName, itemTip, isArmorItem, isShieldItem, isStaffItem } from './conf
 export { ENCH, enchantSummary, isEnchantable } from './enchant.js'
 export { isoIcon } from './textures.js'
 export { MODE } from './state.js'
+
+/* 拼写面板：词表数据 + 字母盘 / 选词自动摆料。
+ * spellPanel.js 不经过 uiActions.js，避免把 actions / chests / mobs 那一大圈
+ * 依赖再拉进合成台的静态模块图。 */
+export { spellBookEntries } from './spell.js'
+export { GLYPH_PAD, pickSpellEntry, placeGlyph, undoGlyph } from './spellPanel.js'
