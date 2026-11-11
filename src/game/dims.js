@@ -321,15 +321,34 @@ export function stoneAt(x, y, z) {
  * 跟查询顺序无关 —— 纯函数性因此保住，区块接缝不会裂。 */
 export const CELL = 96;                      // 结构格边长
 
+/* 矿井密度旋钮：改这三个数就能调矿井数量，不必动群系分支。
+ *   STRUCT_FILL     hash2 <= 此值才放结构（原 0.58）。扣掉「泡在水里不建」
+ *                   之后，实测结构格占比约 40% → 45%，用来补偿下面划走的份额。
+ *   MINE_EXTRA      结构格里先按**独立 hash** 划出这一份给矿井，与群系无关 ——
+ *                   旧版雪原 / 丛林 / 沙漠压根不出矿井，这里一并放开。
+ *   MINE_PLAIN_TAIL 平原分支里遗迹 / 矿井的分界（原 0.80，即 20% 矿井）。 */
+export const STRUCT_FILL = 0.66;
+export const MINE_EXTRA = 0.10;
+export const MINE_PLAIN_TAIL = 0.76;
+
 /* 结构类型判定。所有约束（群系、高度、平整度）都写在里面，
  * 保证「同一个格子在任何时刻问都给出同一个答案」。 */
 export function structAt(gx, gz) {
   const r = hash2(gx, gz, SEED + 9001);
-  if (r > 0.58) return 0;                                       // 大多数格子没有结构
+  if (r > STRUCT_FILL) return 0;                                 // 其余格子没有结构
   const cx = gx * CELL + CELL / 2, cz = gz * CELL + CELL / 2;   // 锚点吸附格心
   const info = colInfo(cx, cz);
   const bio = info.bio, h = info.height;
   if (h <= SEA + 1) return 0;                                   // 泡在水里不建
+
+  /* 矿井是地下坑道，旧版却把它塞进「平原 + pick>=0.80」这一个最窄的分支 ——
+   * 雪原 / 丛林 / 沙漠压根不出矿井。这里改用**独立 hash** 先给所有群系划出
+   * 一份，剩下的格子再交给群系分支挑村庄 / 遗迹 / 神殿。
+   * ⚠ 必须是独立 hash：复用 pick 的话，提高矿井率会等量吃掉村庄 / 遗迹。
+   * ⚠ STRUCT_FILL 同步从 0.58 提到 0.66，把划走的份额补回其它结构。
+   * ⚠ 放在平整度抽查之前提前返回，顺带省掉 9 次 colHeight。
+   * 仍保持「一格一结构」（见 structAnchor），没有动缓存 / 形状查询那一层。 */
+  if (hash2(gx, gz, SEED + 9013) < MINE_EXTRA) return 1;
 
   // 平整度：抽查锚点周围 9 个点的高度极差
   let mn = 1e9, mx = -1e9;
@@ -347,7 +366,7 @@ export function structAt(gx, gz) {
   if (bio === BIOME.DESERT) return pick < 0.55 ? 4 : 2;          // 沙漠神殿 / 遗迹
   // 平原：村庄优先，其次遗迹 / 矿井
   if (flat <= 4 && pick < 0.62) return 3;                        // 村庄
-  if (pick < 0.80) return 2;                                     // 遗迹
+  if (pick < MINE_PLAIN_TAIL) return 2;                          // 遗迹
   return 1;                                                      // 废弃矿井
 }
 export const STRUCT_NAME = { 1: '废弃矿井', 2: '遗迹', 3: '村庄', 4: '沙漠神殿',
