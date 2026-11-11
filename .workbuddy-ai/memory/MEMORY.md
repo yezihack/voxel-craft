@@ -12,6 +12,7 @@
 ## 渲染 / 几何
 - `isOpaque(id)`（generate.js）：带 `shape`（cross/plate）的方块一律不算不透明；mesher `buildChunk` 用 6 面邻居做剔除，薄片误判会让相邻实心块被剔面 → 透视穿帮。
 - 超平坦世界会生成结构（村庄/遗迹/矿井），不生成树/花/水；`generate.js` flatWorld 分支里 `structBlockAt` 必须最前且覆盖所有 y（矿井在地下），之后才分层。
+- 结构格 `CELL=96`，`structAt(gx,gz)` **一格一结构**（`structAnchor`/`structShapeCache` 按 gx,gz 单值缓存）。矿井密度只调 `dims.js` 三个旋钮 `STRUCT_FILL`/`MINE_EXTRA`/`MINE_PLAIN_TAIL`；**矿井份额必须走独立 hash**（`hash2(gx,gz,SEED+9013)`）且放在群系分支之前，复用 `pick` 会等量吃掉村庄/遗迹。`worldCensus()` 样方 `SAMPLE_N=96=CELL` 只覆盖 4 格，开始面板显示「0 条废弃矿井」是正常采样，别当回归。
 
 ## 生物（mobs.js）
 - MOB_TYPES 用 flag 分派 AI：`boss` 分支必须放在 `if (D.hostile)` 之前；`fly:true` 在 mobPhysics 岩浆灼烧后、`wasGround` 前短路跳过重力，只做三轴 AABB；`!boss` 才参与距离回收。
@@ -61,6 +62,7 @@
 - 截图逐像素比对不能单独当「世界没变」：树叶取 `uTime`、手部取 `worldTime`，任意两帧都有差异；要拍一张**确实变坏**的对照组 C，用 `diff(A,B) ≪ diff(A,C)` 说话。
 - `scroll-behavior:smooth` 会让无头截图截到半路；断言前把 `documentElement.style.scrollBehavior` 改 `auto` 再 `scrollTo`，核对 `nav.getBoundingClientRect().top === 0`。
 - **线上（生产 bundle）探针不能 import 页面模块**：没有 `/src/game/*.js`，只能纯 DOM 真实点击；触屏 context 点 `.tb.sys`「背包」可绕开指针锁 / KeyE 并顺带覆盖手机端。`v-show` 与长列表首帧有竞态，点击前必须 `waitForSelector(..., {state:'visible'})`，固定 sleep 会撞 `element is not visible`。参考 `.scratch/spell-craft/online-probe.mjs`。
+- **线上找产物标记不能只扫初始 resource**：游戏逻辑在异步加载的 `index-*.js` 动态 chunk，入口 `main-*.js` 只留引用名 —— 从入口文本正则解析 chunk 名再 `fetch('/assets/<name>')` 一起找。就绪等待用 `/地形就绪（/`（未就绪提示「等这一行变成「地形就绪」再点」也含这四字）；进游戏等 `.veil.hide`（`display:none`），别用固定 sleep。参考 `.scratch/mine-density/online-probe.mjs`。
 
 ## 验证流程 / 提交
 1. `npx vite build` 必须过（108 modules、贴图 242/256、index js 约 246 kB / gzip 94）。

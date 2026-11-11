@@ -66,3 +66,18 @@ export const MINE_PLAIN_TAIL = 0.76;  // 原 0.80
 - **仍是一格一结构**。矿井在几何上完全在地下、与地面建筑不冲突，让它与村庄共存需要改 `structAnchor` / `structShapeCache` 的 key / `inStructFootprint` / `worldCensus`，改动面明显更大。本次按「更多一些」取最小改动：靠独立 hash + 结构率补偿把数量提上来，代价是那 10% 被划走的格子不再有地面结构（已由结构率提升补足总量）。
 - 地形是纯函数、不入档，本次改动对既有存档没有兼容问题；老档重新进游戏会按新分布看到更多矿井。
 - 未改 `collectMine` 的 `len = 26`、支架间距、矿脉与箱子逻辑，矿井规模不变。
+
+## 部署与线上验收
+
+- 提交 `fc09aa6`（仅 `src/game/dims.js` 与本目录 probe / spec；并行会话的箱子系统改动未纳入）。
+- 干净 worktree `voxel-craft-deploy-fc09aa6` 检出 HEAD、junction 主仓库 `node_modules` 后 `npx vite build`：`111 modules`，入口 `main-Dvb8pQ_l.js` 100.40 kB / gzip 39.52 kB，游戏 chunk `index-Dl5uXyaa.js` 247.70 kB / gzip 94.55 kB。
+- `npx wrangler@3 pages deploy dist --project-name voxel-craft --branch=main` → `https://3d9cde5c.voxel-craft-516.pages.dev`；生产别名 `https://voxel-craft-516.pages.dev/` 已指向新入口 `/assets/main-Dvb8pQ_l.js`。
+- `.scratch/mine-density/online-probe.mjs`（纯 DOM 真点击，系统 Chrome）**6/6 全过、零控制台报错**：HTTP 200 / 标题「方块世界」/ WebGL 正常 / 能进入游戏 / 开始面板仍有「N 条废弃矿井」统计项 / 线上产物含新标记 `9013`。
+
+### 线上探针首版 3 条失败的坑
+
+1. **等待文案误匹配**：未就绪提示是「等这一行变成「地形就绪」再点 🙂」，`/地形就绪/` 会立即命中，脚本在引擎没加载完就点开始按钮，连带「能进入游戏」也失败。改成 `/地形就绪（/`，用紧跟的全角左括号认真正的就绪文案「地形就绪（N 棵树 · …）」。
+2. **动态 chunk 不在初始 resource 列表里**：`9013` 只出现在异步加载的游戏 chunk `index-Dl5uXyaa.js`，入口 `main-Dvb8pQ_l.js` 里只是一个引用名；只扫 `performance.getEntriesByType('resource')` 会漏掉。改成从入口 JS 文本正则解析 chunk 名，构造 `/assets/<name>` 显式 fetch 后一起找标记（本次命中第 2 个 JS，HTTP 200）。
+3. **进游戏别用固定 sleep**：`StartVeil.vue` 是 `:class="{ hide: !ui.veilVisible }"` + `.veil.hide { display:none }`，改成 `waitForFunction` 等 `.veil` 挂上 `hide` 类 / `display:none`，超时 30s。
+
+另：线上开始面板显示「**0 条废弃矿井**」不是回归 —— `worldCensus()` 的 `SAMPLE_N = 96`、`CELL = 96`，只枚举 `gx,gz ∈ {-1,0}` 共 4 个结构格；按 20.1% 占比期望 0.8 条，出 0 完全正常。密度证据以纯 Node 探针的 2880 格统计为准。
