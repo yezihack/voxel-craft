@@ -45,6 +45,7 @@
 - 触屏渲染倍率上限 1.5（桌面 2.0，见 `loop.js resize()`）；无键盘，存档/读档/暂停/换模式都要按钮。
 - 竖屏底部整条是拇指区（摇杆 + 2×2 动作区 `bottom:100px`），Vitals 走 `.vitals.touch` 挪左上 `top:52px`；≤400px 物品栏缩 32×40、≤350px 缩 28×36；`HotBar` 不设 max-width。
 - 手机闪退三堵：触屏判定放宽到 `coarse || innerWidth <= 900`；`pointerlockerror` 在 `ui.touch` 下直接 return；`webglcontextlost` → 存档+reload，`visibilitychange` → 存档+暂停，`onerror`/`unhandledrejection` → FatalNotice。别删。
+- 拼写面板（`spellPanel.js` / `SpellBook.vue`）：`CraftBox` **两种模式都显示**（别加 `v-if="surv"`，否则默认创造模式完全找不到入口）；字块是学习材料**不占背包账**，放料直接写 `craftSlots` 不走 `craftPlace`，`clearCraft/craftClearAt` 靠 `isGlyphBlock` 挡住 `invAdd`；`spellBookEntries()` 只列 3×3 摆得下的词（≤9 字母、A–Z 齐备）且同 key 只取 `arr[0]`，与 `takeCraftResult` 的 `entries[0]` 口径一致。`engine.js` 的 NOT_READY_KEYS 要同步登记 `placeGlyph/pickSpellEntry/undoGlyph`。
 
 ## 已知边界 bug
 - 指针锁被拒时背包关不掉：`openBag()` 拿不到锁会 `pauseGame()` 置 `running=false`，而 KeyE 条件是 `k === 'KeyE' && running`。脚本绕过：调 `startGame(false)`。
@@ -59,12 +60,14 @@
 - `page.evaluate` 回调在浏览器里跑，访问不到 node 变量，必须 `return {...}` 出来。
 - 截图逐像素比对不能单独当「世界没变」：树叶取 `uTime`、手部取 `worldTime`，任意两帧都有差异；要拍一张**确实变坏**的对照组 C，用 `diff(A,B) ≪ diff(A,C)` 说话。
 - `scroll-behavior:smooth` 会让无头截图截到半路；断言前把 `documentElement.style.scrollBehavior` 改 `auto` 再 `scrollTo`，核对 `nav.getBoundingClientRect().top === 0`。
+- **线上（生产 bundle）探针不能 import 页面模块**：没有 `/src/game/*.js`，只能纯 DOM 真实点击；触屏 context 点 `.tb.sys`「背包」可绕开指针锁 / KeyE 并顺带覆盖手机端。`v-show` 与长列表首帧有竞态，点击前必须 `waitForSelector(..., {state:'visible'})`，固定 sleep 会撞 `element is not visible`。参考 `.scratch/spell-craft/online-probe.mjs`。
 
 ## 验证流程 / 提交
 1. `npx vite build` 必须过（108 modules、贴图 242/256、index js 约 246 kB / gzip 94）。
 2. `.scratch/<topic>/probe.mjs` 断言全过。
 3. 写 `.scratch/<topic>/spec.md`（根因 / 做法 / 验证）。
 4. 追加 `.workbuddy-ai/memory/YYYY-MM-DD.md`；`git add` 自己改的文件后 commit（**中文祈使句**，概括根因+新增内容）。注意工作区常有并行会话的未提交代码，别顺手 `git add -A` 把别人的半成品带上。
+5. **同一文件叠了两条功能线时**：`git show HEAD:<file>` 取 blob → 脚本按唯一锚点只施加本线 hunk → `git hash-object -w` + `git update-index --cacheinfo 100644,<sha>,<path>` 写暂存区；工作区文件保持原样，别人的改动既不会丢也不会被带上。参考 `.scratch/spell-craft/split.mjs`。
 
 ## 宣传页 / 素材 / 部署
 - `intro.html` 必须留在 `vite.config.js` 的 `rollupOptions.input`；素材路径一律 `/media/...`（public 约定）；成品只进 `public/media/`，`.scratch/**/*.{png,webm,mp4,webp,log}` 已 gitignore（wrangler 日志带账号邮箱）。
