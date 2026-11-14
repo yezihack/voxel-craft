@@ -61,7 +61,11 @@ CH.setCanvas(CTX_CANVAS);
 const { I, BLOCKS, ITEMS, EGG_OF, MOB_TILE_COLORS } = await import('../../src/game/config.js');
 const { isOpaque, isSolid, setBlock, getEffective } = await import('../../src/game/generate.js');
 const { player } = await import('../../src/game/player.js');
-const { setColCache } = await import('../../src/game/state.js');
+const { MODE, setColCache, setModeState } = await import('../../src/game/state.js');
+/* boss 的召唤 / 爆破 / 喷弹都挂在「锁定玩家」这个前提下。默认 mode 是 CREATIVE，
+ * 而创造模式自 .scratch/creative-immunity/spec.md 起怪物无视玩家 —— 必须显式切到
+ * 生存模式，否则守卫不召唤、凋灵不爆破。 */
+setModeState(MODE.SURVIVAL);
 const { MOB_TYPES, mobs, spawnMob, updateMobs, buildMobMesh, damageMob, mobAI, mobPhysics, surfaceY } = await import('../../src/game/mobs.js');
 
 let fails = 0;

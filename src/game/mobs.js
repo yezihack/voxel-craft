@@ -11,7 +11,7 @@ import { keys } from './input.js'
 import { FACES } from './mesher.js'
 import { moveBodyAxis, player } from './player.js'
 import { potionStrengthBonus } from './potions.js'
-import { heal, heldId, hurt, inv, invAdd } from './survival.js'
+import { heal, heldId, hurt, inv, invAdd, playerAttackable } from './survival.js'
 import { shade } from './textures.js'
 
 /* ============================== 生物 ============================== */
@@ -699,11 +699,14 @@ export function nearestBot(m, range) {
 /* 僵尸的目标：玩家 / 傀儡 / AI 玩家里取最近的一个。
  * ⚠ 场上没有傀儡、也没有 bot、玩家也活着时，返回值必须与旧实现**逐字等价** ——
  * 旧的一批断言全都只放玩家，不能被这次泛化带偏。
- * 旁观模式同理：玩家「不存在」于怪物的感知里（bd = Infinity），
- * 于是怪物只会去揍傀儡和 AI 玩家 —— 旁观时看傀儡大战僵尸才是正经事。 */
+ * 非生存模式（创造 / 旁观）同理：玩家「不存在」于怪物的感知里（bd = Infinity），
+ * 于是怪物只会去揍傀儡和 AI 玩家 —— 旁观时看傀儡大战僵尸才是正经事，
+ * 创造模式则安静造房子。`hurt()` 早已免掉非生存模式的扣血，但近战击退 /
+ * 挥击冷却 / 骷髅瞄准时都不经过 hurt —— 不在**目标选择**这里断开，
+ * 创造模式照样会被僵尸打飞、被苦力怕追着点引信。 */
 export function hostileTarget(m, sight) {
   let best = player, bd = Math.hypot(player.x - m.x, player.z - m.z), kind = 'player';
-  if (player.dead || mode === MODE.SPECTATOR) bd = Infinity;    // 死了就不再被追
+  if (!playerAttackable()) bd = Infinity;    // 死了 / 非生存模式就不再被追
   const g = nearestThreat(m, Math.min(sight, bd), isGuardType);
   if (g) { best = g; bd = Math.hypot(g.x - m.x, g.z - m.z); kind = 'guard'; }
   /* AI 玩家也是猎物。少了这一条，僵尸只会追真人 —— 旁边的 bot 站着挨打不掉血，
@@ -1499,9 +1502,9 @@ export function explodeMob(m) {
         if (BLOCKS[id] && BLOCKS[id].hard >= 6) continue;      // 黑曜石：炸不动
         setBlock(x, y, z, 0);
       }
-  // 玩家：距离衰减 + 击退。旁观模式下玩家不存在于爆炸里（hurt 也会挡，但别顺带把人轰飞）
+  // 玩家：距离衰减 + 击退。非生存模式下玩家不在爆炸里（hurt 也会挡，但别顺带把人轰飞）
   const pd = Math.hypot(player.x - cx, player.z - cz);
-  if (mode !== MODE.SPECTATOR && pd < reach && Math.abs(player.y + 0.9 - cy) < R + 1.2) {
+  if (playerAttackable() && pd < reach && Math.abs(player.y + 0.9 - cy) < R + 1.2) {
     const falloff = 1 - pd / reach;
     hurt(Math.max(1, Math.round(D.fuse.dmg * falloff)), '你被苦力怕炸死了');
     if (pd > 0.01) {
@@ -1588,8 +1591,9 @@ export function updateArrows(dt) {
         }
       }
       /* 敌方箭命中玩家：AABB 用玩家碰撞箱（半宽 PW、高 1.8）。
-       * 旁观模式下玩家「不存在」，箭直接穿过去。 */
-      if (!gone && a.foe && !player.dead && mode !== MODE.SPECTATOR &&
+       * 创造 / 旁观模式下玩家「不存在」，箭直接穿过去 —— 不吞箭也不放命中粒子，
+       * 否则切到创造后残留的骷髅箭仍会打在身上。 */
+      if (!gone && a.foe && playerAttackable() &&
           a.x > player.x - PW && a.x < player.x + PW &&
           a.y > player.y && a.y < player.y + 1.8 &&
           a.z > player.z - PW && a.z < player.z + PW) {

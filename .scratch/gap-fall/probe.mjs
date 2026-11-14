@@ -68,7 +68,11 @@ CH.setCanvas(CTX_CANVAS);
 
 const { I } = await import('../../src/game/config.js');
 const { setBlock, getEffective, isSolid } = await import('../../src/game/generate.js');
-const { setColCache } = await import('../../src/game/state.js');
+const { MODE, setColCache, setModeState } = await import('../../src/game/state.js');
+/* 本探针靠「怪追着玩家跑」驱动 AI 与物理。默认 mode 是 CREATIVE，而创造模式
+ * 自 .scratch/creative-immunity/spec.md 起怪物无视玩家 —— 必须显式切到生存模式，
+ * 否则怪只会原地闲逛，全部「掉进沟」断言都会假阴性。 */
+setModeState(MODE.SURVIVAL);
 const { player } = await import('../../src/game/player.js');
 const { MOB_TYPES, mobs, spawnMob, mobAI, mobPhysics } = await import('../../src/game/mobs.js');
 

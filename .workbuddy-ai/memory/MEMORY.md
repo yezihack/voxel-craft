@@ -20,6 +20,7 @@
 - 白天烧：`SUNBURN_TYPES` + `underOpenSky`（头顶扫到 H=64）+ 每 0.4s 重算 `m.skyT`，挂 mobPhysics 之后、dead 检查之前。渲染三态 tint 里燃烧判 `hurtFlash > 0.2`（底噪 0.12），否则绿通道被压到 0 变血块。
 - **1 格宽沟（squeeze）**：贴地探测「AABB 覆盖任一格实心就算站住」，w≥1 的生物会架成隐形桥。蜘蛛 / 大史莱姆挂 `squeeze:true` → 水平+贴地用 `Math.min(D.w/2, SQUEEZE_HW=0.4)`，竖直扫掠另用 `CENTER_HW=0.02`（否则擦到对岸被 moveBodyAxis 顶回地面）。`w` 仍是渲染 / 命中盒宽度，不动；小史莱姆 w=0.55 本就掉得进去，**别给它挂 squeeze**（会白白改掉它的竖直扫掠）。
 - 配套三件缺一不可：① 贴地吸附加 `m.y >= footY+1-GROUND_SNAP_TOL(0.06)` 禁止上拽，且**必须加 `D.squeeze` 守卫**，否则全局改掉其它生物的贴地手感；② `inShaft`（身体层两侧都实心）禁掉蜘蛛沟内爬墙，判据别加「两侧上方是空气」——只在沟口第一层成立，深沟第二层会被误判成走廊又爬回去；③ 贴地探测**不能**收成中心列，会让蜘蛛在沟口过早失足、被水平 AABB 推回岸上。1 格宽走廊里 `inShaft` 会误禁爬墙，属已知取舍。
+- **玩家可攻击判定只有一个**：`survival.js` 的 `playerAttackable()`（`mode === SURVIVAL && !player.dead`）。`hurt()` / `hostileTarget()` / `updateArrows()` 的 foe 命中 / `explodeMob()` 的玩家击退四处共用，别再各写 `mode !== MODE.SPECTATOR`。创造模式免伤早在 `hurt()` 里就有，但**击退、命中特效、追踪、引信、boss 爆破都不走 hurt**；只在目标选择断开仍会漏掉「已在飞的箭」和「独立结算的爆炸」。爆炸破坏方块是世界行为，别一起挡。
 
 ## 贴图（textures.js）
 - 程序化贴图 = noiseTile 基础 + 覆盖层；`^item_egg_\w+$` 自动走 `eggIconTile`；boss 需登记 MOB_TILE_COLORS。
@@ -63,6 +64,7 @@
 - `scroll-behavior:smooth` 会让无头截图截到半路；断言前把 `documentElement.style.scrollBehavior` 改 `auto` 再 `scrollTo`，核对 `nav.getBoundingClientRect().top === 0`。
 - **线上（生产 bundle）探针不能 import 页面模块**：没有 `/src/game/*.js`，只能纯 DOM 真实点击；触屏 context 点 `.tb.sys`「背包」可绕开指针锁 / KeyE 并顺带覆盖手机端。`v-show` 与长列表首帧有竞态，点击前必须 `waitForSelector(..., {state:'visible'})`，固定 sleep 会撞 `element is not visible`。参考 `.scratch/spell-craft/online-probe.mjs`。
 - **线上找产物标记不能只扫初始 resource**：游戏逻辑在异步加载的 `index-*.js` 动态 chunk，入口 `main-*.js` 只留引用名 —— 从入口文本正则解析 chunk 名再 `fetch('/assets/<name>')` 一起找。就绪等待用 `/地形就绪（/`（未就绪提示「等这一行变成「地形就绪」再点」也含这四字）；进游戏等 `.veil.hide`（`display:none`），别用固定 sleep。参考 `.scratch/mine-density/online-probe.mjs`。
+- **历史 mob 探针默认跑在 CREATIVE**：`gap-fall` / `boss` 探针靠「怪追玩家」驱动物理 / AI / boss 召唤与爆破，从不显式设 mode。任何改动「怪物是否锁定玩家」都会让它们成片假阴性 —— 两处已补 `setModeState(MODE.SURVIVAL)`；新写的 mob 探针也要显式设模式。
 
 ## 验证流程 / 提交
 1. `npx vite build` 必须过（108 modules、贴图 242/256、index js 约 246 kB / gzip 94）。

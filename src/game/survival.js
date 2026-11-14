@@ -108,6 +108,13 @@ export let deathReason = '';                  // 最近一次死亡的原因文�
  * 放在模块级而不是 player 上：它们是纯计时中间量，不进存档、界面也不读。 */
 let potionRegenT = 0, potionPoisonT = 0;
 
+/* 玩家此刻是否「可被攻击」。创造 / 旁观模式与已死亡的玩家都不该被瞄准、
+ * 被击退、被扣血。扣血、目标选择、敌方弹药命中、爆炸击退必须共用这一个
+ * 口径 —— 之前各写各的 mode 判断，才出现「创造模式不掉血、却被僵尸打飞」。 */
+export function playerAttackable() {
+  return mode === MODE.SURVIVAL && !player.dead;
+}
+
 /* reason 可选：岩浆/僵尸/摔落… —— 不传就由界面层按环境猜。
  * opts.pierce = true 表示「无视护甲与盾牌」：环境伤害（摔落 / 缺氧 /
  * 岩浆 / 仙人掌 / 饥饿）走这一路，因为护甲挡的是打击，挡不住缺氧和坠落势能；
@@ -115,14 +122,11 @@ let potionRegenT = 0, potionPoisonT = 0;
  * 外部调用（僵尸近战 / 骷髅箭 / 苦力怕爆炸）不传 pierce → 照常被减免。 */
 export function hurt(n, reason, opts) {
   const p = player;
-  if (n <= 0 || p.dead) return -1;
-  /* 只有生存模式会受伤。创造免疫一切伤害，这里是最外层的兜底。
-   * updateSurvival 已经用 `mode !== MODE.SURVIVAL` 挡住了坠落/岩浆/溺水/仙人掌/饥饿，
-   * 但僵尸攻击走的是 mobAI → hurt() 这条**旁路**，骷髅箭走 updateArrows → hurt()，
-   * 苦力怕走 explodeMob → hurt() —— 不在这里堵住就会出现
-   * 「创造模式被僵尸打死」。放在 hurt 里而不是调用点，是为了以后新增伤害源
-   * 时不用再记得补一遍判断。旁观模式同理：观察者不该被世界碰伤。 */
-  if (mode !== MODE.SURVIVAL) return -1;
+  /* 只有生存模式会受伤。updateSurvival 已挡住坠落 / 岩浆 / 溺水 / 仙人掌 /
+   * 饥饿，但僵尸近战（mobAI）、骷髅箭（updateArrows）、苦力怕爆炸（explodeMob）
+   * 都是绕过它的旁路 —— 不在这里兜住就会出现「创造模式被僵尸打死」。
+   * 击退 / 命中特效 / 引信 / 目标选择不走 hurt，由同一判定在各处自行挡掉。 */
+  if (n <= 0 || !playerAttackable()) return -1;
   /* 护甲 + 盾牌：两者都是「减伤」而不是「免伤」，所以最低保留 1 点 ——
    * 否则穿齐星陨套举着铁盾就能在岩浆里泡澡，那就不叫生存模式了；
    * 而「血条纹丝不动」也会让玩家失去对危险的判断。 */
