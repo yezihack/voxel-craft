@@ -63,3 +63,11 @@
 **历史探针前提失效（已修）**：`.scratch/gap-fall/probe.mjs` 与 `.scratch/boss/probe.mjs` 从未显式设置模式，默认跑在 `MODE.CREATIVE`，靠「怪会追玩家」驱动 AI / 物理 / boss 召唤与爆破。本次需求让创造模式怪物无视玩家，于是前者 20 条、后者 2 条断言全部假阴性。两个探针各补一行 `setModeState(MODE.SURVIVAL)` 并注明原因，现均全部通过。这是测试前提被需求改变，**不是产品回归**。
 
 回归结果：`gap-fall` / `boss` / `bot-hurt` / `sunburn` / `mine-density` / `spell-craft` 纯 Node 全过；`bots` 的「空手死亡偶尔掉落火把」是历史记录过的随机偶发（连跑 3 次全过），与本次无关；`potions` / `enchant` 依赖 Playwright 与 dev server，在重起的干净 dev server（5190）+ 系统 Chrome 下也全过 —— 药水零控制台报错、贴图 244 格，附魔 52 项。
+
+## 部署与线上验收
+
+- 提交 `20829a3`；走 `.scratch/gh-sync/push-via-api.mjs` 同步到 GitHub，`origin/main` 对齐该 SHA。
+- 干净 worktree 检出 `20829a3`、junction 主仓库 `node_modules` 后 `npx vite build`：`111 modules`，入口 `main-C_k1fH4G.js` 100.40 kB / gzip 39.52 kB，游戏 chunk `index-CGS8fpFh.js` 247.68 kB / gzip 94.55 kB；同目录纯 Node 探针 32/32。
+- 部署 Cloudflare Pages production：`https://52e79588.voxel-craft-516.pages.dev`，生产别名 `https://voxel-craft-516.pages.dev/` 已指向新入口。
+- `.scratch/creative-immunity/online-probe.mjs` 线上 **8/8 全过、零控制台报错**：HTTP 200 / 标题 / 地形就绪 / 入口与 chunk 均为本次构建且 200 / WebGL / 能进游戏。
+- **产物指纹而非源码标记**：生产 bundle 会 minify，`playerAttackable` 这类导出名被改名，无法像矿井密度那样在 JS 里查常量标记。线上改查「index.html 引用的入口名 + 入口文本引用的动态 chunk 名 + 两者 200」，证明跑的是这一版；功能逻辑由纯 Node 探针覆盖。换构建时通过 `EXPECT_ENTRY` / `EXPECT_CHUNK` 环境变量覆盖。
