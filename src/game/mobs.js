@@ -351,13 +351,12 @@ if (Object.keys(EGG_OF).length !== EGG_MOBS.length)
   throw new Error('刷怪蛋数量(' + Object.keys(EGG_OF).length + ') 与生物种类(' + EGG_MOBS.length + ') 对不上');
 
 export const mobs = [];
-/* 同屏上限。26 → 38 → 64（按玩家要求再放宽）。
- * 夜里 + 村庄 + 刷怪蛋同时拉满时，38 太容易撞顶：想再放一只 boss 会被
- * 「场上生物太多了」挡回去。64 只的 AI 与物理都只是一次简单函数调用，
- * 桌面端毫无压力；手机端会明显掉帧，但这是玩家明确要的取舍。
- * 刷怪间隔也跟着从 1.4s 缩到 1.0s —— 只放宽上限不改速率的话，
- * 从 38 涨到 64 要多等 40 秒，看起来就像「上限根本没变」。 */
-export const MOB_CAP = 64;
+/* 场上生物**不设数量上限**（MOB_CAP 已按玩家要求删除）。
+ * 别再往 spawnMob / summonGolem / updateMobSpawn / 刷怪蛋里加
+ * `mobs.length >= N` 这类总闸：那会让「摆一排傀儡」「连放一箱刷怪蛋」
+ * 被静默拒绝，而且失败时没有任何反馈。
+ * 唯一的自然节流是 updateMobs 里的 48 格远距回收（傀儡 / boss /
+ * 附身目标除外）—— 它管「走远了清掉」，不管「同时最多几只」。 */
 
 /* ---------------- AI 玩家（bots）的接入点 ----------------
  * 为什么用注入而不是 import：bots.js 已经 `import ... from './mobs.js'`，
@@ -419,10 +418,9 @@ export function canSummonAt(type, x, y, z) {
   return true;
 }
 /* 在指定位置召唤一只傀儡。成功返回那只生物，失败返回 null。
- * 上限只认 MOB_CAP —— 玩家想摆一排保镖是他的自由，
- * GUARD_CAP 限制的是「村庄自己长出来」的那种。 */
+ * 不设数量闸：玩家想摆一排保镖是他的自由；GUARD_CAP 只约束
+ * 「村庄自己长出来」的那种，与这里无关。 */
 export function summonGolem(type, x, y, z, yaw) {
-  if (mobs.length >= MOB_CAP) return null;
   if (!canSummonAt(type, x, y, z)) return null;
   return spawnMob(type, x + 0.5, y, z + 0.5, yaw);
 }
@@ -900,7 +898,7 @@ export function mobAI(m, dt) {
       if (D.summonAdds && m.summonT <= 0) {
         let count = 0;
         for (const o of mobs) if (o.type === D.summonAdds.type) count++;
-        if (count < D.summonAdds.cap && mobs.length < MOB_CAP) {
+        if (count < D.summonAdds.cap) {
           m.summonT = D.summonAdds.cd;
           for (let i = 0; i < D.summonAdds.n; i++) {
             const a = mobRng() * Math.PI * 2, r = 3 + mobRng() * 2;
@@ -1140,7 +1138,7 @@ export function updateMobSpawn(dt) {
   mobSpawnT -= dt;
   if (mobSpawnT > 0) return;
   mobSpawnT = 1.0;
-  if (mobs.length >= MOB_CAP || player.dead) return;
+  if (player.dead) return;
   /* 异界从入口就分道扬镳，绝不落进下面主世界那条总闸（理由见 dimMobSpawn） */
   if (dim !== 0) { dimMobSpawn(); return; }
   /* ⚠⚠ 刷怪总闸：**敌对生物只在夜里刷，白天任何情况都不刷**。

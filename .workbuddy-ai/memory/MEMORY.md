@@ -15,6 +15,7 @@
 - 结构格 `CELL=96`，`structAt(gx,gz)` 一格一结构（`structAnchor`/`structShapeCache` 按 gx,gz 单值缓存）。矿井密度只调 `dims.js` 的 `STRUCT_FILL`/`MINE_EXTRA`/`MINE_PLAIN_TAIL`；份额必须走独立 hash `hash2(gx,gz,SEED+9013)` 且在群系分支之前，复用 `pick` 会等量吃掉村庄/遗迹。`worldCensus()` 样方 `SAMPLE_N=96` 只覆盖 4 格，面板显示「0 条废弃矿井」是正常采样。
 
 ## 生物（mobs.js）
+- **场上生物不设数量上限**（2026-11-15 删掉 `MOB_CAP = 64` 及其 4 道闸：`summonGolem` / boss 援军 / `updateMobSpawn` / 刷怪蛋）。别再加 `mobs.length >= N` 总闸——傀儡核心/刷怪蛋撞顶时是**静默拒绝**，最难查。唯一自然节流是 `updateMobs` 的 48 格远距回收（傀儡/boss/附身目标除外）。**保留**：`player.dead` 刷怪门控、`GUARD_CAP=3`（仅村庄自生傀儡）、`summonAdds.cap=4`（boss 援军配额）——都不是总数上限。挂机且怪聚在 48 格内会无限累积掉帧，属玩家已接受的取舍；要兜底请加回收，别加数量闸。见 `.scratch/mob-cap/spec.md`。
 - MOB_TYPES 用 flag 分派 AI：`boss` 分支放在 `if (D.hostile)` 之前；`fly:true` 在 mobPhysics 岩浆灼烧后、`wasGround` 前短路跳重力，只做三轴 AABB；`!boss` 才参与距离回收。
 - 远程攻击复用骷髅 `shootArrowAt(foe:true)`；凋灵爆破只借 `explodeMob` 的球形破坏循环（不能直接调，会置 `dead` 自杀），伤害单独算。
 - 白天烧：`SUNBURN_TYPES` + `underOpenSky`（头顶扫到 H=64）+ 每 0.4s 重算 `m.skyT`，挂 mobPhysics 之后、dead 检查之前；渲染 tint 燃烧判 `hurtFlash>0.2`（底噪 0.12），否则绿通道被压到 0 变血块。

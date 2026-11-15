@@ -8,7 +8,7 @@ import { isChestBlock, takeChestContents } from './chests.js'
 import { carts, isRail, raycastCart, spawnCart, boardCart } from './carts.js'
 import { DIMS } from './dims.js'
 import { getEffective, isLiquid, isSolid, setBlock } from './generate.js'
-import { MOB_CAP, MOB_TYPES, fireMagicBolt, mobs, spawnMob, summonGolem } from './mobs.js'
+import { MOB_TYPES, fireMagicBolt, spawnMob, summonGolem } from './mobs.js'
 import { insideSelf, player, raycast } from './player.js'
 import { ignitePortal } from './portal.js'
 import { applyPotion } from './potions.js'
@@ -287,7 +287,6 @@ export function trySpawnEgg(id) {
     x = cx; y = cy; z = cz; ok = true; break;
   }
   if (!ok) { blip(120, 0.09, 'square', 0.04); toast('得对着地面放'); return false; }
-  if (mobs.length >= MOB_CAP) { toast('场上生物太多了，先清一清再放'); return false; }
   const m = spawnMob(type, x + 0.5, y, z + 0.5, player.yaw + Math.PI);
   if (!m) { blip(120, 0.09, 'square', 0.04); return false; }
   if (mode === MODE.SURVIVAL) invTake(id, 1);
