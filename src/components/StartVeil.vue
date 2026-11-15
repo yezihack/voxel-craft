@@ -62,9 +62,9 @@ const claimCode = ref('')
 
 const cloudLabel = computed(() => {
   if (cloudState.value === 'checking') return '正在连接云端…'
-  if (cloudState.value === 'offline') return '云端暂不可达（离线仍可玩）'
+  if (cloudState.value === 'offline') return '云端暂不可达 · 离线可玩'
   if (cloudState.value === 'ok' && cloudMeta.value) return `云端已同步 · ${cloudMeta.value.blocks} 格改动`
-  return '云端已连接 · 尚无备份（保存一次即可）'
+  return '云端已连接 · 尚无备份'
 })
 
 async function refreshCloud() {
@@ -479,7 +479,9 @@ async function onFile(e) {
 /* 存档码整串可点复制，也允许长按选中（剪贴板 API 被拒时的退路） */
 .codebtn {
   flex: 0 0 auto;
-  max-width: 52%;
+  /* 存档码优先完整显示：空间不够时让左边的状态文字去省略，
+   * 而不是把 UUID 截掉一半（那正是「看不到存档码」的来源）。 */
+  max-width: none;
   padding: 5px 9px;
   border-radius: 8px;
   cursor: pointer;
@@ -536,10 +538,12 @@ async function onFile(e) {
   .keys {
     grid-template-columns: 1fr
   }
+}
 
-  /* 窄屏优先保证状态可读，UUID 让位给省略号（title 里仍是完整码） */
+/* 只有真正的手机窄屏才让 UUID 让位给省略号（title / 点击复制仍是完整码） */
+@media (max-width: 480px) {
   .codebtn {
-    max-width: 38%
+    max-width: 44%
   }
 }
 
