@@ -1,6 +1,7 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { engine, ui } from '../engine.js'
+import { toast } from '../game/uiState.js'
 import { MODES } from '../data/modes.js'
 import { VEIL_KEYS } from '../data/veilKeys.js'
 import { WORLDS } from '../data/worlds.js'
@@ -28,9 +29,26 @@ const save = computed(() => {
  * 顺序必须是「先读再 start」，反过来的话指针锁定会先拿到、
  * 而 applySave 里的 initChunks 又把区块全标脏，第一帧会闪一下空世界。 */
 function continueSave() {
-  const r = engine.loadNow()
-  if (r && r.ok) engine.startGame(!ui.touch)
+  if (save.value) {
+    const r = engine.loadNow()
+    if (r && r.ok) engine.startGame(!ui.touch)
+  } else if (cloudMeta.value) {
+    /* 本地没档、云端有档：拉回云端存档再进游戏。
+     * loadFromCloud 是异步的，这里 await 后再 start（顺序同 loadNow：先读再 start）。 */
+    cloudMeta.value = null
+    engine.loadFromCloud().then((r) => {
+      if (r && r.ok) engine.startGame(!ui.touch)
+      else toast('⚠ 从云端读取失败，请检查网络')
+    })
+  }
 }
+
+/* 云端存档摘要（本地无档时用于「从云端继续」门控）。
+ * 挂载时查一次；saveNow 之后也刷新，让面板及时反映云端状态。 */
+const cloudMeta = ref(null)
+onMounted(async () => {
+  if (engine.cloudMeta) cloudMeta.value = await engine.cloudMeta()
+})
 
 function startNew() {
   if (typeof window !== 'undefined' && window.confirm
@@ -85,10 +103,14 @@ async function onFile(e) {
       <button class="go" @click="tryStart">开始游戏</button>
 
       <!-- 存档区：有档就显示摘要 + 继续 / 删档，没档就提示快捷键 -->
-      <div v-if="save" class="saverow">
+      <div v-if="save || cloudMeta" class="saverow">
         <button class="savebtn" @click="continueSave">
-          📂 继续上次存档
-          <span class="savemeta">{{ save.when }} · {{ save.dimName }} · {{ save.modeName }} · {{ save.blocks }} 格改动</span>
+          <template v-if="save">📂 继续上次存档
+            <span class="savemeta">{{ save.when }} · {{ save.dimName }} · {{ save.modeName }} · {{ save.blocks }} 格改动</span>
+          </template>
+          <template v-else>☁️ 从云端继续
+            <span class="savemeta">云端存档 · {{ cloudMeta.blocks }} 格改动</span>
+          </template>
         </button>
         <button class="wiped" title="删除存档并重新开始" @click="startNew">🗑</button>
       </div>

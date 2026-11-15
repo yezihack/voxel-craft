@@ -32,6 +32,7 @@ export const engine = shallowReactive({})
 const NOT_READY_KEYS = [
   'pickMode', 'pickWorldType', 'startGame', 'newWorld', 'respawnAndStart',
   'saveNow', 'loadNow', 'saveStatus', 'pauseGame', 'exportSave', 'importSaveFile',
+  'loadFromCloud', 'cloudMeta',
   'toggleBag', 'toggleBagExpand', 'cycleMode', 'toggleFly', 'selectSlot',
   'setStick', 'setLook', 'setInputKey', 'touchMine', 'touchPlace',
   /* 附魔台面板虽然要进游戏才会打开，但模板里的按钮从第一帧就存在 ——

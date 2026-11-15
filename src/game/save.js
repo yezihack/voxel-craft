@@ -18,6 +18,7 @@ import { armorRestore, armorSnapshot, clearArmor } from './armor.js'
 import { chestRestore, chestSnapshot } from './chests.js'
 import { enchantRestore, enchantSnapshot } from './enchant.js'
 import { dimEdits } from './generate.js'
+import { buildEditDelta } from './cloudDelta.js'
 import { chunks, initChunks } from './mesher.js'
 import { setWorldTime, worldTime } from './mobs.js'
 import { player } from './player.js'
@@ -113,14 +114,17 @@ export function snapshot() {
  *   reason  —— 失败原因（'quota' / 'serialize' / 'empty'）
  * 不弹提示：调用方（uiActions / 自动存档）自己决定要不要打扰玩家。 */
 export function saveGame() {
-  let json
-  try { json = JSON.stringify(snapshot()) } catch { return { ok: false, reason: 'serialize', bytes: 0 } }
+  let snap, json
+  try { snap = snapshot(); json = JSON.stringify(snap) } catch { return { ok: false, reason: 'serialize', bytes: 0 } }
   const bytes = json.length
   const ok = store.set(SAVE_KEY, json)
   /* meta 单独存一份：开始面板要显示「上次存档在哪个维度、多少方块」，
    * 而为了读这几个字去解析几 MB 的主存档太亏。 */
-  const snap = { t: Date.now(), dim, mode, flat: flatWorld, blocks: countEdits() }
-  try { store.set(META_KEY, JSON.stringify(snap)) } catch { /* meta 失败不影响主存档 */ }
+  const metaSnap = { t: Date.now(), dim, mode, flat: flatWorld, blocks: countEdits() }
+  try { store.set(META_KEY, JSON.stringify(metaSnap)) } catch { /* meta 失败不影响主存档 */ }
+  /* 顺手推云端：D1 是持久真源，localStorage 只是缓存 + 离线层。
+   * 异步 fire-and-forget——本地写盘结果才是 saveGame 的返回值。 */
+  pushToCloud(snap)
   return { ok, bytes, reason: ok ? null : 'quota' }
 }
 
@@ -155,6 +159,116 @@ export function saveMeta() {
 export function deleteSave() {
   store.del(SAVE_KEY)
   store.del(META_KEY)
+  invalidateCloud()
+  deleteCloudSave()                            // 异步删云端，失败静默
+}
+
+/* ---------------- 云同步（Cloudflare D1） ----------------
+ * 浏览器不能直接连 D1（服务端绑定），所有落库都走 Pages Functions
+ * （functions/api/save.js）。这里 localStorage 继续当「首跳读缓存 + 离线层」，
+ * D1 是持久真源——大地图不再受 localStorage ~5MB 配额威胁，清数据也有备份。
+ *
+ * 身份 = 匿名 UUID（MVP）：首次运行生成一个存在 localStorage；换设备 / 清数据即失联
+ * （档仍在 D1 但拿不回）——这是 MVP 已知取舍，「存档码」认领留作第二阶段。 */
+
+const OWNER_KEY = 'voxel-craft:owner'
+
+export function getOwner() {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      let o = localStorage.getItem(OWNER_KEY)
+      if (!o) {
+        o = (typeof crypto !== 'undefined' && crypto.randomUUID)
+          ? crypto.randomUUID()
+          : 'u' + Math.random().toString(36).slice(2) + Date.now().toString(36)
+        localStorage.setItem(OWNER_KEY, o)
+      }
+      return o
+    }
+  } catch { /* 隐私模式禁用 */ }
+  return 'anon'                                   // node / 无 localStorage 兜底
+}
+
+/* 上次成功推到云端的 edits 快照（按维度分表的 Map）。
+ * null = 云端还没有这份世界的基线，下次推送要把全部 edits 都发上去。 */
+let lastPushed = null
+
+/* 拉取 / 导入 / 开新世界后调用：让下次推送把当前内存状态完整重传，
+ * 而不是拿过时基线算 diff（会漏掉大量改动）。 */
+export function invalidateCloud() { lastPushed = null }
+
+function snapshotEdits() {
+  const out = []
+  for (let d = 0; d < DIM_N; d++) out.push(new Map(dimEdits[d]))
+  return out
+}
+
+/* 推一份快照到云端（异步、不阻塞、失败静默）。
+ * 只发「相对上次推送改动过的格子」——数 MB 的世界也不会每 60 秒重传整体。 */
+export function pushToCloud(snap) {
+  if (typeof fetch === 'undefined') { lastPushed = snapshotEdits(); return }
+  const cur = snapshotEdits()
+  let delta = { added: [], removed: [] }
+  try { delta = buildEditDelta(cur, lastPushed) } catch { /* diff 失败就发全量兜底 */ }
+  lastPushed = cur
+
+  const payload = {
+    v: snap.v,
+    seed: snap.seed, dim: snap.dim, flat: snap.flat, mode: snap.mode, time: snap.time,
+    selected: snap.selected,
+    player: snap.player,
+    inv: snap.inv, slots: snap.slots,
+    armor: snap.armor, ench: snap.ench, potions: snap.potions, chests: snap.chests,
+    edits: delta,
+  }
+  fetch('/api/save', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', 'x-owner': getOwner() },
+    body: JSON.stringify(payload),
+  }).catch((e) => { console.warn('[cloud] push failed', e) })   // 离线 / 抖动：本地缓存仍有效
+}
+
+/* 从云端拉完整快照（异步）。无档或出错返回 null。 */
+export async function pullFromCloud() {
+  if (typeof fetch === 'undefined') return null
+  try {
+    const r = await fetch('/api/save', { headers: { 'x-owner': getOwner() } })
+    if (!r.ok) return null
+    const data = await r.json()
+    return data && data.save ? data.save : null
+  } catch { return null }
+}
+
+/* 云端是否有存档（异步，供开始面板门控）。返回 null 或 { has,t,dim,mode,flat,blocks }。 */
+export async function cloudMeta() {
+  if (typeof fetch === 'undefined') return null
+  try {
+    const r = await fetch('/api/save?meta=1', { headers: { 'x-owner': getOwner() } })
+    if (!r.ok) return null
+    return await r.json()
+  } catch { return null }
+}
+
+/* 无本地档时回退云端：拉回 → 写本地缓存（之后离线读档也能用）→ applySave。 */
+export async function loadFromCloud() {
+  const d = await pullFromCloud()
+  if (!d) return { ok: false, reason: 'none' }
+  try {
+    store.set(SAVE_KEY, JSON.stringify(d))
+    let blocks = 0
+    if (Array.isArray(d.edits)) for (const list of d.edits) if (Array.isArray(list)) blocks += list.length
+    store.set(META_KEY, JSON.stringify({
+      t: Number.isFinite(d.t) ? d.t : Date.now(), dim: d.dim | 0, mode: d.mode | 0, flat: !!d.flat, blocks,
+    }))
+  } catch { /* 缓存失败不影响云端读档 */ }
+  invalidateCloud()
+  return applySave(d)
+}
+
+/* 删云端存档（异步 fire-and-forget，配合 deleteSave）。 */
+export function deleteCloudSave() {
+  if (typeof fetch === 'undefined') return
+  fetch('/api/save', { method: 'DELETE', headers: { 'x-owner': getOwner() } }).catch(() => {})
 }
 
 /* 把存档应用到当前世界。
@@ -296,7 +410,9 @@ export function applySave(d) {
 export function loadGame() {
   const d = readSave()
   if (!d) return { ok: false, reason: 'none' }
-  return applySave(d)
+  const r = applySave(d)
+  if (r.ok) invalidateCloud()                 // 内存已是这份世界，下次推送以它为基线
+  return r
 }
 
 /* ---------------- 导出 / 导入 ----------------
@@ -338,6 +454,7 @@ export function importSaveJson(text) {
       dim: d.dim | 0, mode: d.mode | 0, flat: !!d.flat, blocks,
     }))
   } catch { /* meta 失败不影响主存档 */ }
+  invalidateCloud()                            // 整份世界被文件覆盖，下次推送重传全量
   return { ok: true, bytes: json.length }
 }
 

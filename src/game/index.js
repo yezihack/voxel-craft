@@ -26,6 +26,13 @@ export {
   toggleFly, touchMine, touchPlace, unequipArmorSlot,
 } from './uiActions.js'
 
+/* 云端持久化（Cloudflare D1）：engine 门面需要暴露给开始面板的「从云端继续」。
+ * 这些函数定义在 save.js 内部（避免循环依赖），uiActions 不重新导出，所以这里直引。 */
+export {
+  cloudMeta, deleteCloudSave, getOwner, invalidateCloud,
+  loadFromCloud, pullFromCloud, pushToCloud,
+} from './save.js'
+
 /* 派生数据 */
 export {
   allItemIds, allPlaceableIds, armorSlotsView, armorSummary, bagSubtitle,

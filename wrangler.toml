@@ -1,0 +1,12 @@
+name = "voxel-craft"
+pages_build_output_dir = "dist"
+compatibility_date = "2025-11-15"
+compatibility_flags = ["nodejs_compat"]
+
+# Cloudflare D1 绑定：存档持久化的服务端 SQLite。
+# 部署前执行 `wrangler d1 create voxel-craft-saves`，把输出的 id 填到下面。
+[[d1_databases]]
+binding = "DB"
+database_name = "voxel-craft-saves"
+database_id = "REPLACE_WITH_WRANGLER_D1_CREATE_OUTPUT"
+migrations_dir = "migrations"
