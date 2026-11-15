@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { engine, ui } from '../engine.js'
 import { toast } from '../game/uiState.js'
 import { MODES } from '../data/modes.js'
@@ -19,9 +19,12 @@ function tryStart() {
 }
 
 /* 存档摘要。依赖 ui.saveRev —— localStorage 变了但 ui 上没有响应式依赖，
- * 不挂一个版本号的话面板会一直显示上一次的摘要（见 uiState 的注释）。 */
+ * 不挂一个版本号的话面板会一直显示上一次的摘要（见 uiState 的注释）。
+ * 还要挂 ui.engineReady：首帧 engine.saveStatus 是 NOT_READY 占位（返回 null），
+ * 引擎就绪后不重算的话，明明有本地档也会一直显示「还没有存档」。 */
 const save = computed(() => {
   ui.saveRev
+  ui.engineReady
   return engine.saveStatus ? engine.saveStatus() : null
 })
 
@@ -34,21 +37,87 @@ function continueSave() {
     if (r && r.ok) engine.startGame(!ui.touch)
   } else if (cloudMeta.value) {
     /* 本地没档、云端有档：拉回云端存档再进游戏。
-     * loadFromCloud 是异步的，这里 await 后再 start（顺序同 loadNow：先读再 start）。 */
+     * loadFromCloud 是异步的，这里 then 后再 start（顺序同 loadNow：先读再 start）。 */
     cloudMeta.value = null
     engine.loadFromCloud().then((r) => {
-      if (r && r.ok) engine.startGame(!ui.touch)
+      if (r && r.ok) { ui.saveRev++; engine.startGame(!ui.touch) }
       else toast('⚠ 从云端读取失败，请检查网络')
     })
   }
 }
 
-/* 云端存档摘要（本地无档时用于「从云端继续」门控）。
- * 挂载时查一次；saveNow 之后也刷新，让面板及时反映云端状态。 */
-const cloudMeta = ref(null)
-onMounted(async () => {
-  if (engine.cloudMeta) cloudMeta.value = await engine.cloudMeta()
+/* ---------------- 云端存档（Cloudflare D1） ----------------
+ * 匿名 UUID 是「无感」身份：不登录、不显示，档跟着这台浏览器走。
+ * 但完全不可见就没法验证云同步、也没法换设备取回 —— 所以这里把存档码
+ * 显式露出来，并允许粘贴另一台设备的码认领云端存档。
+ *
+ * ⚠ 时序：StartVeil 比 App.onMounted 更早挂载，首帧 engine.cloudMeta
+ * 还是 NOT_READY_KEYS 的 noop（返回 null）。必须等 ui.engineReady 再查，
+ * 否则云端有档也永远不会出现「从云端继续」。 */
+const cloudMeta = ref(null)         // 有档时 { has,t,dim,mode,flat,blocks }，否则 null
+const cloudState = ref('checking')  // checking | empty | ok | offline
+const ownerCode = ref('')
+const claimOpen = ref(false)
+const claimCode = ref('')
+
+const cloudLabel = computed(() => {
+  if (cloudState.value === 'checking') return '正在连接云端…'
+  if (cloudState.value === 'offline') return '云端暂不可达（离线仍可玩）'
+  if (cloudState.value === 'ok' && cloudMeta.value) return `云端已同步 · ${cloudMeta.value.blocks} 格改动`
+  return '云端已连接 · 尚无备份（保存一次即可）'
 })
+
+async function refreshCloud() {
+  if (!ui.engineReady || !engine.cloudMeta) return null
+  if (engine.getOwner) ownerCode.value = engine.getOwner() || ''
+  let m = null
+  try { m = await engine.cloudMeta() } catch { m = null }
+  cloudMeta.value = m && m.has ? m : null
+  cloudState.value = m && m.has ? 'ok' : (m && m.has === false ? 'empty' : 'offline')
+  return m
+}
+
+/* 引擎一就绪就查；之后每次存 / 读 / 删档（saveRev 变化）再查一次。
+ * 延迟 900ms 是等 saveGame 里 fire-and-forget 的 PUT 真正落库。 */
+watch(() => ui.engineReady, () => { refreshCloud() }, { immediate: true })
+let cloudTimer = null
+watch(() => ui.saveRev, () => {
+  clearTimeout(cloudTimer)
+  cloudTimer = setTimeout(refreshCloud, 900)
+})
+
+async function copyOwner() {
+  if (!ownerCode.value) return
+  try {
+    await navigator.clipboard.writeText(ownerCode.value)
+    toast('✓ 存档码已复制，另一台设备粘贴即可认领')
+  } catch { toast('请长按存档码手动复制') }
+}
+
+/* 认领：换 owner → 查云端 → 有档就直接载入并进游戏；没档则还原身份，
+ * 避免把当前世界误推到别人的空档位上。 */
+async function doClaim() {
+  const code = (claimCode.value || '').trim()
+  if (!code) return
+  const prev = ownerCode.value
+  if (!engine.setOwner || !engine.setOwner(code)) { toast('⚠ 存档码格式不对'); return }
+  const m = await refreshCloud()
+  if (!m || !m.has) {
+    if (prev) engine.setOwner(prev)
+    await refreshCloud()
+    toast('⚠ 这个存档码没有云端存档')
+    return
+  }
+  claimOpen.value = false
+  const r = await engine.loadFromCloud()
+  if (r && r.ok) {
+    ui.saveRev++
+    toast('✓ 已从云端载入存档')
+    engine.startGame(!ui.touch)
+  } else {
+    toast('⚠ 云端存档读取失败')
+  }
+}
 
 function startNew() {
   if (typeof window !== 'undefined' && window.confirm
@@ -137,6 +206,18 @@ async function onFile(e) {
           <span class="savemeta">选择导出的 .json，导入后直接进入该世界</span>
         </button>
         <input ref="fileEl" type="file" accept=".json,application/json" hidden @change="onFile">
+      </div>
+
+      <!-- 云端存档状态 + 存档码：匿名 UUID 默认完全不可见，这里显式暴露，
+           既能验证 D1 是否真的在同步，也能抄到另一台设备认领。 -->
+      <div class="cloudrow">
+        <span class="cloudstat" :class="cloudState">☁️ {{ cloudLabel }}</span>
+        <button class="codebtn" :title="ownerCode || '存档码'" @click="copyOwner"><code>{{ ownerCode || '——' }}</code> ⧉</button>
+        <button class="codebtn" @click="claimOpen = !claimOpen">认领</button>
+      </div>
+      <div v-if="claimOpen" class="claimrow">
+        <input v-model="claimCode" type="text" spellcheck="false" placeholder="粘贴另一台设备的存档码" @keyup.enter="doClaim">
+        <button @click="doClaim">载入</button>
       </div>
 
       <!-- 宣传页入口：访客最先想知道的「这游戏长什么样」。
@@ -370,9 +451,95 @@ async function onFile(e) {
   margin: 0 2px
 }
 
+/* ---------- 云端存档 / 存档码 ----------
+ * 一行里塞下「状态 + 完整 UUID + 认领」，不能再多占纵向空间 ——
+ * 面板在手机上本来就接近一屏高度。 */
+.cloudrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--dim);
+}
+
+.cloudstat {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cloudstat.ok { color: #8fdd7a }
+.cloudstat.offline { color: #f0a37e }
+.cloudstat.checking { opacity: .75 }
+
+/* 存档码整串可点复制，也允许长按选中（剪贴板 API 被拒时的退路） */
+.codebtn {
+  flex: 0 0 auto;
+  max-width: 52%;
+  padding: 5px 9px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1.5px solid rgba(255, 255, 255, .16);
+  background: rgba(255, 255, 255, .04);
+  color: var(--txt);
+  font: inherit;
+  font-size: 10.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.codebtn code {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 10px;
+}
+
+.codebtn:hover {
+  background: rgba(255, 255, 255, .10);
+  border-color: rgba(255, 255, 255, .35)
+}
+
+.claimrow {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.claimrow input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1.5px solid rgba(67, 224, 255, .32);
+  background: rgba(0, 0, 0, .22);
+  color: var(--txt);
+  font: inherit;
+  font-size: 11px;
+}
+
+.claimrow button {
+  padding: 7px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1.5px solid rgba(67, 224, 255, .42);
+  background: rgba(67, 224, 255, .10);
+  color: var(--accent);
+  font: inherit;
+  font-size: 11px;
+}
+
 @media (max-width: 820px) {
   .keys {
     grid-template-columns: 1fr
+  }
+
+  /* 窄屏优先保证状态可读，UUID 让位给省略号（title 里仍是完整码） */
+  .codebtn {
+    max-width: 38%
   }
 }
 

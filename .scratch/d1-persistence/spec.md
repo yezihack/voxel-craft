@@ -73,3 +73,27 @@ Status: ready-for-agent
 - **本地测试即用 SQLite**：`wrangler dev --local` 由 Miniflare 起本地 SQLite 文件，方言/客户端 API 与生产 D1 一致；不要另起 `better-sqlite3` 手搓（API 与方言会分叉）。
 - **MVP 已知局限**：owner UUID 存 `localStorage`，整份清数据时 UUID 一并丢失、云端档不可达。这正是「存档码」要解的。但大地图的「localStorage 配额写失败」因存档主体已迁入 D1 而被根治。
 - **部署步骤**（实现后由用户执行）：`wrangler d1 create voxel-craft-saves` → 填 `database_id` → `wrangler d1 migrations apply voxel-craft-saves --local` 与 `--remote` → 在 Pages 控制台确认 D1 绑定 `DB` → `npm run build && npx wrangler pages deploy dist --project-name voxel-craft --branch=main`。
+
+---
+
+## 上线后修订（2026-11-15，第二轮）
+
+用户完成四步部署后发现开始面板「没有 UUID 什么的」。核查结论：**部署全部成功**（`database_id` 已填、远端 `saves`/`edits` 表存在、`PUT→GET→DELETE` 全通、前端产物含云代码），看不到 UUID 是「匿名」方案本身无 UI。但由此暴露两个真缺陷，已修：
+
+1. **引擎就绪时序**：`StartVeil.vue` 比 `App.onMounted` 更早挂载，首帧 `engine.cloudMeta` / `engine.saveStatus` 是 `NOT_READY_KEYS` 的 noop（返回 `null`），挂载时那一次云端检查永远拿不到结果 —— 云端有档也不会出现「☁️ 从云端继续」，本地有档也不会出现「继续上次存档」。修法：`ui.engineReady` 由 `initEngine` 在 `Object.assign` 后置 true，两个 computed/检查都挂这个响应式依赖。
+2. **身份完全不可见**：无法验证云同步、无法跨设备取回。补「存档码」UI：显示完整 UUID + 一键复制 + `setOwner()` 认领（空码还原身份，避免把当前世界误推到别人的空档位）；云端状态分 `checking / empty / ok / offline`，存/读档后经 `ui.saveRev` 自动刷新。
+
+配套修正：
+- `functions/api/save.js` 空档从 404 改为 200（`{has:false}` / `{save:null}`）——404 会被浏览器记成控制台资源错误，验收脚本要求零报错。
+- `pushToCloud` 的 PUT 失败时清 `lastPushed` 基线，否则这批增量永不重发、云端静默少格子。
+- `cloudMeta()` 区分「404/空档」与「网络异常」，面板才能正确显示「尚无备份」而非误报离线。
+- `.gitignore` 加 `.wrangler/`（本地 SQLite 状态不入库）。
+
+> 订正两处早期笔误：本地集成测试命令是 `npx wrangler@3 pages dev dist --local`（不是 `wrangler dev`）；构建门禁现为 115 modules。
+
+### 验证
+
+- `.scratch/d1-persistence/cloud-ui-probe.mjs`：**11/11**（UUID 显示、空/有档状态、首屏「从云端继续」、认领与空码还原、零控制台报错）。
+- `.scratch/d1-persistence/probe.mjs`：`buildEditDelta` 8/8 回归通过。
+- `npx vite build`：115 modules 通过。
+- 线上（部署前基线）：`PUT → GET(meta/全量) → DELETE` 全通，`id=0` 挖空保留，增量 `written:1, deleted:1` 正确。

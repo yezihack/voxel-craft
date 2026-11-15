@@ -52,6 +52,13 @@ export const ui = reactive({
   /* ---- 世界 ---- */
   worldFlat: false,            // 世界类型：false = 经典起伏，true = 超平坦
 
+  /* ---- 引擎就绪 ----
+   * 引擎是动态 import 的，而开始面板比 App.onMounted 更早挂载 ——
+   * 首帧读 engine.xxx 拿到的是 NOT_READY_KEYS 的 noop 占位。
+   * initEngine 里 Object.assign 之后置 true，组件靠它重算摘要 / 重发云端检查，
+   * 否则「继续上次存档」和「从云端继续」都不会出现。 */
+  engineReady: false,
+
   /* ---- 存档 ----
    * saveRev 是一个「版本号」：每次存 / 读 / 删档都 +1。
    * 组件里读 saveStatus() 时顺手读一下它，就能在存档变化后重算 ——

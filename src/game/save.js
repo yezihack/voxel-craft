@@ -189,6 +189,22 @@ export function getOwner() {
   return 'anon'                                   // node / 无 localStorage 兜底
 }
 
+/* 认领另一台设备的存档码（第二阶段「跨设备取回」的入口）。
+ * 只接受 UUID 形态的字符，防止把任意字符串当 owner 写进请求头；
+ * 换身份必须清掉增量基线，否则下一笔 diff 会拿旧 owner 的世界状态去算。 */
+export function setOwner(code) {
+  const c = String(code || '').trim()
+  if (!/^[A-Za-z0-9_-]{8,64}$/.test(c)) return false
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(OWNER_KEY, c)
+      invalidateCloud()
+      return true
+    }
+  } catch { /* 隐私模式禁用 */ }
+  return false
+}
+
 /* 上次成功推到云端的 edits 快照（按维度分表的 Map）。
  * null = 云端还没有这份世界的基线，下次推送要把全部 edits 都发上去。 */
 let lastPushed = null
@@ -225,7 +241,14 @@ export function pushToCloud(snap) {
     method: 'PUT',
     headers: { 'content-type': 'application/json', 'x-owner': getOwner() },
     body: JSON.stringify(payload),
-  }).catch((e) => { console.warn('[cloud] push failed', e) })   // 离线 / 抖动：本地缓存仍有效
+  }).then((r) => {
+    /* 失败必须清掉基线：否则这批增量永远不会被重发，云端会静默少几个格子。
+     * 下次 pushToCloud 以 lastPushed=null 重算全量 diff 补上。 */
+    if (!r.ok) { lastPushed = null; console.warn('[cloud] push failed', r.status) }
+  }).catch((e) => {
+    lastPushed = null                                     // 离线 / 抖动：本地缓存仍有效
+    console.warn('[cloud] push failed', e)
+  })
 }
 
 /* 从云端拉完整快照（异步）。无档或出错返回 null。 */
@@ -244,6 +267,9 @@ export async function cloudMeta() {
   if (typeof fetch === 'undefined') return null
   try {
     const r = await fetch('/api/save?meta=1', { headers: { 'x-owner': getOwner() } })
+    /* 404 = 后端通、这个 owner 还没档；其它非 2xx / 网络异常 = 云端不可达。
+     * 两者要分开，开始面板才能显示「尚无备份」而不是误报「离线」。 */
+    if (r.status === 404) return { has: false }
     if (!r.ok) return null
     return await r.json()
   } catch { return null }

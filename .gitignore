@@ -3,6 +3,12 @@ dist
 dist-ssr
 *.local
 
+# wrangler 本地状态：--local 的 SQLite 数据 / 迁移记录，绝不入库
+.wrangler/
+
+# 线上产物抓取的临时文本，仅用于诊断
+.scratch/d1-persistence/online/
+
 # 截图产物：由 .scratch/mobile/shot.mjs 随时重新生成，别把几 MB 的 PNG 塞进仓库
 .scratch/**/*.png
 

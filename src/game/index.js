@@ -30,7 +30,7 @@ export {
  * 这些函数定义在 save.js 内部（避免循环依赖），uiActions 不重新导出，所以这里直引。 */
 export {
   cloudMeta, deleteCloudSave, getOwner, invalidateCloud,
-  loadFromCloud, pullFromCloud, pushToCloud,
+  loadFromCloud, pullFromCloud, pushToCloud, setOwner,
 } from './save.js'
 
 /* 派生数据 */

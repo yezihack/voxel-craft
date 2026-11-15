@@ -3,8 +3,10 @@
  * 浏览器不能直接连 D1（服务端绑定），所以这是唯一能碰 DB 的地方。
  * owner 取自 x-owner 头（匿名 UUID，由客户端生成并存 localStorage）。
  *
- * GET  /api/save        -> { save: <与 localStorage 同构的快照> }，无档 404
- * GET  /api/save?meta=1 -> { has, t, dim, mode, flat, blocks }，无档 404
+ * GET  /api/save        -> { save: <与 localStorage 同构的快照> }，无档 { save: null }
+ * GET  /api/save?meta=1 -> { has, t, dim, mode, flat, blocks }，无档 { has: false }
+ * 空档一律 200：给 404 会让浏览器把「首次进入、还没存过档」记成
+ * 控制台资源错误（验收脚本要求零报错），语义上也不该算「资源不存在」。
  * PUT  /api/save         -> 增量写入（saves upsert + edits 逐格 upsert/delete），全部走 db.batch
  */
 
@@ -56,11 +58,12 @@ export async function onRequestGet(context) {
   const db = env.DB
   if (!db) return new Response('D1 not bound', { status: 500 })
 
-  const row = await db.prepare('SELECT * FROM saves WHERE owner=? AND slot=?').bind(owner, SLOT).first()
-  if (!row) return new Response(null, { status: 404 })
-
   const url = new URL(request.url)
-  if (url.searchParams.get('meta') === '1') {
+  const isMeta = url.searchParams.get('meta') === '1'
+  const row = await db.prepare('SELECT * FROM saves WHERE owner=? AND slot=?').bind(owner, SLOT).first()
+  if (!row) return Response.json(isMeta ? { has: false } : { save: null })
+
+  if (isMeta) {
     const c = await db.prepare('SELECT COUNT(*) AS c FROM edits WHERE owner=? AND slot=?').bind(owner, SLOT).first()
     return Response.json({
       has: true,

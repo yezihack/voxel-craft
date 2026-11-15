@@ -32,7 +32,7 @@ export const engine = shallowReactive({})
 const NOT_READY_KEYS = [
   'pickMode', 'pickWorldType', 'startGame', 'newWorld', 'respawnAndStart',
   'saveNow', 'loadNow', 'saveStatus', 'pauseGame', 'exportSave', 'importSaveFile',
-  'loadFromCloud', 'cloudMeta',
+  'loadFromCloud', 'cloudMeta', 'getOwner', 'setOwner',
   'toggleBag', 'toggleBagExpand', 'cycleMode', 'toggleFly', 'selectSlot',
   'setStick', 'setLook', 'setInputKey', 'touchMine', 'touchPlace',
   /* 附魔台面板虽然要进游戏才会打开，但模板里的按钮从第一帧就存在 ——
@@ -54,6 +54,8 @@ export async function initEngine(canvasEl) {
   setCanvas(canvasEl)
   const m = await import('./game/index.js')
   Object.assign(engine, m)
+  /* 让首帧已经渲染过的 computed 重新求值：它们之前读到的是占位 noop。 */
+  uiState.engineReady = true
   m.attachSystemEvents()
   m.attachSurvivalHooks()
   m.pickMode(m.MODE.CREATIVE)
