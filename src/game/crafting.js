@@ -75,6 +75,9 @@ export function craftKeyTable() {
     j: 200,              // 苹果（item 200）
     c: 201,              // 胡萝卜（item 201，注意不是方块 I.CARROT）
     g: I.GLOW,           // 萤石
+    /* 箱子配方用到的末地石（黑曜石 E / 沙岩 H 已有位）。
+     * e = Endstone。26 个大写已满，继续用未占用的小写。 */
+    e: I.ENDSTONE,       // 末地石
   };
 }
 export const CRAFT_KEY = craftKeyTable();
@@ -111,6 +114,21 @@ export const RECIPES = [
   /* 3×3 大件 */
   { out: I.STONE,     n: 8, grid: ['CCC', 'C C', 'CCC'] }, // 8 圆石围一圈 → 8 石头（熔炉形状）
   { out: I.PUMPKIN,   n: 1, grid: ['HHH', 'HUH', 'HHH'] }, // 沙岩包南瓜 → 南瓜（保形状用）
+
+  /* ---------------- 箱子 ----------------
+   * 四种箱子按「材质递进」设计配方，形状统一是 Minecraft 的经典围一圈：
+   *   木箱   = 8 木板（最便宜的收纳）
+   *   铁箱   = 4 铁矿 + 4 圆石（铁匠的料）
+   *   金箱   = 4 金矿 + 4 红石
+   *   末影箱 = 4 黑曜石 + 4 末地石（异界料，最难凑）
+   *
+   * ⚠ 同形不冲突：matchRecipe 取首个命中，而**材料不同**就不会互相吃 ——
+   *   8 圆石围一圈出的是石头（上面的配方），8 木板围一圈出的是木箱。
+   *   两种配方可以共存，前提是材料字符不重叠。 */
+  { out: I.BOX_WOOD,  n: 1, grid: ['PPP', 'P P', 'PPP'] },
+  { out: I.BOX_IRON,  n: 1, grid: ['RCR', 'CCC', 'RCR'] },
+  { out: I.BOX_GOLD,  n: 1, grid: ['OTO', 'TTT', 'OTO'] },
+  { out: I.BOX_ENDER, n: 1, grid: ['EEE', 'EHE', 'EEE'] },
 
   /* ---------------- 工具与武器 ----------------
    * 形状沿用 Minecraft 的经典摆法：镐「三头两柄」、斧「三头两柄偏左」、

@@ -1,9 +1,10 @@
 /* 操作：挖掘 / 放置 / 进食 / 召唤 / 点燃传送门 —— 迁移自 voxel-craft.html 第 8474-8648 行 */
 
 import { toast } from './uiState.js'
-import { MODE, mode, running, setHandSwing } from './state.js'
+import { MODE, dim, mode, running, setHandSwing } from './state.js'
 import { blip, noiseBurst } from './audio.js'
 import { BLOCKS, DIM_N, EGG_OF, EYE, H, I, ITEMS, PORTAL_BLOCK, REACH, SHIELD_OF, STAFF_OF, SUMMON_OF } from './config.js'
+import { isChestBlock, takeChestContents } from './chests.js'
 import { carts, isRail, raycastCart, spawnCart, boardCart } from './carts.js'
 import { DIMS } from './dims.js'
 import { getEffective, isLiquid, isSolid, setBlock } from './generate.js'
@@ -11,7 +12,7 @@ import { MOB_CAP, MOB_TYPES, fireMagicBolt, mobs, spawnMob, summonGolem } from '
 import { insideSelf, player, raycast } from './player.js'
 import { ignitePortal } from './portal.js'
 import { applyPotion } from './potions.js'
-import { collectDrop, heal, heldId, invCount, invTake, tryEat } from './survival.js'
+import { collectDrop, heal, heldId, invAdd, invCount, invTake, tryEat } from './survival.js'
 import { P } from './textures.js'
 import { axisFromYaw, clearBelt, clearPad, registerPad, setBeltDir, tryBlink } from './transport.js'
 
@@ -28,6 +29,21 @@ export const isBedrock = (hit) => hit.id === I.OBSIDIAN && hit.y === 0;
  * 由 uiActions.js 在模块体里装上去。 */
 export let onOpenEnchant = () => {};
 export function setOpenEnchantHook(fn) { onOpenEnchant = fn; }
+
+/* 准星指着箱子 → 这次右键是「开箱」，不是往它上面贴一块方块。
+ * 和附魔台同一套语义与同一套解法（依赖注入，见上面的注释）。
+ *
+ * ⚠ 箱子必须在**手持物判定之前**拦下来：手里拿着木板右键箱子，
+ *   玩家想的是开箱，结果贴了一块板 —— 这和附魔台是同一个坑。 */
+export let onOpenChest = () => {};
+export function setOpenChestHook(fn) { onOpenChest = fn; }
+
+export function tryOpenChest() {
+  const hit = raycast(REACH);
+  if (!hit || !isChestBlock(hit.id)) return false;
+  onOpenChest(hit);
+  return true;
+}
 
 /* 准星指着附魔台 → 这次右键是「开台面」，不是「往它上面贴一块方块」。
  * 和 MC 同一套语义：对着台子按右键永远先开台。
@@ -53,6 +69,24 @@ export function breakBlock(hit, withDrop) {
    * （新方块读到上一次存的方向），而且被拆掉的传送板会留下一条指向空气的链接。 */
   if (id === I.BELT) clearBelt(hit.x, hit.y, hit.z);
   if (id === I.PAD) clearPad(hit.x, hit.y, hit.z);
+  /* 箱子：拆掉时里面的东西必须掉出来。
+   * ⚠ 顺序很关键 —— **先取内容再 setBlock**。
+   *   反过来的话，setBlock 之后坐标已空，取内容的时机就晚了；
+   *   而且箱子被拆后容器记录要删掉（见 takeChestContents），
+   *   否则玩家在原地再放一个箱子，会凭空看到旧箱子里的东西。 */
+  if (isChestBlock(id)) {
+    const contents = takeChestContents(dim, hit.x, hit.y, hit.z);
+    if (contents && withDrop) {
+      let n = 0;
+      for (const cid in contents) {
+        const cnt = contents[cid] | 0;
+        if (cnt <= 0) continue;
+        invAdd(+cid, cnt);
+        n += cnt;
+      }
+      if (n > 0) toast('箱子里掉出 ' + n + ' 件东西');
+    }
+  }
   setBlock(hit.x, hit.y, hit.z, 0);
   setHandSwing(1);
   noiseBurst(0.10, 0.09, id === I.SAND ? 2600 : id === I.GLASS ? 5200 : 1100);
@@ -82,9 +116,10 @@ export function doBreakTimed(hit) {
 export function doPlace() {
   if (!running) return;
   if (mode === MODE.SPECTATOR) return;      // 旁观者碰不到方块
-  /* 先判「是不是在对着附魔台右键」：是就开台并吞掉这次右键。
-   * 这一步必须在 heldId() 之前 —— 空手也要能开台。 */
+  /* 先判「是不是在对着附魔台/箱子右键」：是就开台/开箱并吞掉这次右键。
+   * 这一步必须在 heldId() 之前 —— 空手也要能开台 / 开箱。 */
   if (tryOpenEnchant()) return;
+  if (tryOpenChest()) return;
   const id = heldId();
   if (!id) return;
 

@@ -17,9 +17,10 @@ export { setTagHook, ui } from './uiState.js'
 
 /* 界面动作 */
 export {
-  clearCraftAll, clearCraftSlot, clickInvSlot, closeBag, closeEnchant, cycleMode,
+  clearCraftAll, clearCraftSlot, clickInvSlot, closeBag, closeChest, closeEnchant, cycleMode,
+  chestCapacity, chestPut, chestTake, chestTakeAll,
   enchantInscribe, enchantPickItem, equipArmorItem,
-  exportSave, importSaveFile, loadNow, newWorld, openEnchant, pauseGame, pickLibraryItem,
+  exportSave, importSaveFile, loadNow, newWorld, openChest, openEnchant, pauseGame, pickLibraryItem,
   pickMode, pickRecipe, pickWorldType, respawnAndStart, saveNow, saveStatus, selectSlot,
   setInputKey, setLook, setStick, startGame, takeCraftResult, toggleBag, toggleBagExpand,
   toggleFly, touchMine, touchPlace, unequipArmorSlot,

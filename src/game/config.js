@@ -264,6 +264,30 @@ BLOCKS.push(
     hard:2.40, light:1, tex:{ top:'enchant_top', side:'enchant_side', bot:'obsidian' } },
 );
 
+/* ---------------- 箱子 ----------------
+ * 四种箱子，从木质到末影质。差别**不只是贴图和颜色**，而是三件事同时变：
+ *   · 容量     —— 木箱 9 格 → 末影箱 36 格（见 chests.js 的 CHEST_TYPES）
+ *   · 战利品   —— 越贵给的东西越好（chests.js 里每种一份 loot 池）
+ *   · 挖掘硬度 —— 末影箱 5 秒才能挖开，防止顺手一铲把宝贝连箱带货弄没
+ *
+ * 箱体本身是整立方实体（能站上去、能垒起来、能挡路），
+ * 像家具一样摆在房间里 —— 这是它和「薄片类」机制方块的根本区别。
+ *
+ * chest 字段是**标记**：chests.js 靠它反查「这个方块 id 是哪种箱子」。
+ * 加箱子种类时，BLOCKS 里加一条、chests.js 的 CHEST_TYPES 里加一条，两边名字要对上。
+ *
+ * ⚠ 一律追加在表尾（见上面的 id 纪律）。 */
+BLOCKS.push(
+  { name:'木箱', n:'箱', top:[150,112, 72], side:[132, 96, 60], bot:[118, 84, 52],
+    hard:0.80, chest:'wood', tex:{ top:'chest_wood_top', side:'chest_wood_side', bot:'chest_wood_top' } },
+  { name:'铁箱', n:'箱', top:[176,180,188], side:[150,156,164], bot:[126,132,140],
+    hard:1.80, chest:'iron', tex:{ top:'chest_iron_top', side:'chest_iron_side', bot:'chest_iron_top' } },
+  { name:'金箱', n:'箱', top:[246,204, 78], side:[214,166, 50], bot:[176,128, 34],
+    hard:3.00, chest:'gold', tex:{ top:'chest_gold_top', side:'chest_gold_side', bot:'chest_gold_top' } },
+  { name:'末影箱', n:'箱', top:[ 42, 32, 58], side:[ 28, 20, 42], bot:[ 18, 13, 28],
+    hard:5.00, chest:'ender', tex:{ top:'chest_ender_top', side:'chest_ender_side', bot:'chest_ender_top' } },
+);
+
 export const SOLID = {};                    // id → 是否实体
 /* 传送门不参与碰撞（portal:true）—— 不然玩家会站在自己的门板上，走不进另一个维度。
  * solid:false 同理（火把/铁轨/传送板是贴在地面上的薄片，不该挡路）。
@@ -441,12 +465,21 @@ export const I = {
   WOOL: ID['羊毛·白'], WOOL_RED: ID['羊毛·红'],
   /* 异界地形方块 */
   BASALT: ID['玄武岩'], ENDSTONE: ID['末地石'], CRYSTAL: ID['晶簇岩'],
-  MUSHROOM: ID['蘑菇块'], TOXIC: ID['毒沼'],
-  /* 机制方块（光源 / 红石 / 轨道 / 运输） */
+  MUSHROOM: ID['蘑菇块'], TOXIC: ID['毒沼'],  /* 机制方块（光源 / 红石 / 轨道 / 运输） */
   TORCH: ID['火把'], TORCH_RED: ID['红石火把'], REDSTONE_BLOCK: ID['红石块'],
   RAIL: ID['铁轨'], RAIL_POWERED: ID['充能铁轨'], BELT: ID['传送带'], PAD: ID['传送板'],
   /* 附魔台：右键开台面，词条表见 enchant.js */
   ENCHANT: ID['附魔台'],
+  /* 箱子：右键打开容器。容量与战利品见 chests.js 的 CHEST_TYPES
+   * ⚠ 别名用 BOX_ 前缀而不是 CHEST_ —— 盔甲那边已经占了 CHEST_CLOTH /
+   *   CHEST_IRON / CHEST_DIAMOND / CHEST_STARFALL（胸甲），
+   *   同名会让后定义的覆盖先定义的，I.CHEST_IRON 拿到的是铁甲 274 而不是铁箱。 */
+  BOX_WOOD: ID['木箱'], BOX_IRON: ID['铁箱'],
+  BOX_GOLD: ID['金箱'], BOX_ENDER: ID['末影箱'],
+  /* 箱子战利品里的稀有物资（300 起，物品 id 不是方块 id）：
+   * 面包是现成食物，绿宝石/末影珍珠/下界之星是高阶战利品 ——
+   * 它们此前没有对应的物品 id，而宝箱战利品表里写的就是这几个。 */
+  BREAD: 300, EMERALD: 301, ENDER_PEARL: 302, NETHER_STAR: 303,
 };
 /* 名字写错会静默拿到 undefined —— 早失败早发现 */
 for (const k in I) if (I[k] === undefined) throw new Error('方块别名未定义: ' + k);
@@ -530,7 +563,28 @@ Object.assign(I, {
   POTION_HEAL: 288, POTION_SPEED: 289, POTION_JUMP: 290, POTION_STRENGTH: 291,
   POTION_RESIST: 292, POTION_REGEN: 293, POTION_NIGHT: 294, POTION_WATER: 295,
   POTION_FIRE: 296, POTION_HASTE: 297, POTION_POISON: 298, POTION_SLOW: 299,
+  /* 箱子战利品里的稀有物资（300 起）：
+   * 面包是合成产物之外的现成食物，绿宝石/末影珍珠/下界之星是高阶战利品，
+   * 它们此前没有对应的物品 id —— 宝箱战利品表里写的就是这几个。 */
 });
+
+/* ⚠ 别名重复检查（2026-11-04 加）。
+ * `I` 表由两段拼成：前面的 `export const I = {...}`（方块别名）+
+ * 后面 `Object.assign(I, {...})`（物品别名）。两段都写同一个键时，
+ * **后写的静默覆盖先写的** —— 不报错、不警告，只是值悄悄变了。
+ *
+ * 踩过的坑：箱子别名写成 CHEST_IRON，而盔甲那边早就有 CHEST_IRON（铁甲 274），
+ * 于是 I.CHEST_IRON 拿到的是铁甲而不是铁箱，铁箱配方 out 指向了铁甲，
+ * 玩家合成出来一件铁甲。症状极难查（配方「能用」，只是产物不对）。
+ *
+ * 所以这里显式扫一遍：同一个键出现两次就抛错，早失败早发现。 */
+{
+  const seen = new Map()
+  for (const k in I) {
+    if (seen.has(k)) throw new Error('方块/物品别名重复定义: I.' + k + '（' + seen.get(k) + ' 与 ' + I[k] + '）')
+    seen.set(k, I[k])
+  }
+}
 
 /* 物品表（非方块）：食物等，右键使用。
  * tex 缺省时用 name 当贴图名（item_<name>）。 */
@@ -711,6 +765,14 @@ export const ITEMS = {
   297: { name:'急迫药水',   n:'药', color:[214, 200, 120], tex:'potion_haste',    potion:'haste',    tip:'45 秒内挖掘速度 ×2' },
   298: { name:'剧毒药水',   n:'药', color:[136, 196,  92], tex:'potion_poison',   potion:'poison',   tip:'负面：14 秒内每秒损失 1 点生命' },
   299: { name:'缓慢药水',   n:'药', color:[130, 140, 170], tex:'potion_slow',     potion:'slow',     tip:'负面：16 秒内移动速度 -40%' },
+
+  /* ---------------- 稀有物资 ----------------
+   * 宝箱 / 末影箱战利品表里的东西。此前没有对应的物品 id，
+   * 现在补上 —— 箱子系统（chests.js）的 loot 池直接引用这几个别名。 */
+  300: { name:'面包',     n:'包', color:[206,158, 92], food:5, tex:'bread' },
+  301: { name:'绿宝石',   n:'绿', color:[ 76,206,120], tex:'emerald' },
+  302: { name:'末影珍珠', n:'影', color:[ 46,190,190], tex:'ender_pearl' },
+  303: { name:'下界之星', n:'星', color:[240,236,214], tex:'nether_star' },
 };
 for (const k in ITEMS) ITEMS[k].id = +k;
 /* 维度号 → 核心物品 id。建在 ITEMS 之后（要读 core 字段），

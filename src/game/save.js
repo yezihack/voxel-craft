@@ -15,6 +15,7 @@
  */
 import { CD, CW, DIM_N, isBlockId } from './config.js'
 import { armorRestore, armorSnapshot, clearArmor } from './armor.js'
+import { chestRestore, chestSnapshot } from './chests.js'
 import { enchantRestore, enchantSnapshot } from './enchant.js'
 import { dimEdits } from './generate.js'
 import { chunks, initChunks } from './mesher.js'
@@ -96,6 +97,9 @@ export function snapshot() {
     /* 正在生效的药水：[key, 剩余秒]。读档后继续倒计时，
      * 而不是「存一次档就把药水续满」—— 后者等于无限药水。 */
     potions: potionSnapshot(),
+    /* 箱子内容：[[ '维度:x,y,z', 种类键, {物品id: 数量} ], …]。
+     * 箱子是**世界状态**（不是玩家状态），换档也跟着走。 */
+    chests: chestSnapshot(),
     selected,
     edits: editsToArray(),
   }
@@ -265,6 +269,12 @@ export function applySave(d) {
    * 而不是「保留上一次读档喝剩的药水」。逐条校验在 potions.js 里做
    * （键存在 / 非即时型 / 时长夹到 dur）。 */
   potionRestore(d.potions)
+
+  /* ---- 7d. 箱子内容 ----
+   * 同样无条件调用：老档没有 chests 字段 → chestRestore(undefined) 清空。
+   * 逐条校验在 chests.js 里做（种类键存在 / 物品 id 真实 / 数量为正 / 封顶 9999）——
+   * 存档是玩家能手改的文件。 */
+  chestRestore(d.chests)
 
   /* ---- 8. 模式 ---- */
   setModeState(wantMode)

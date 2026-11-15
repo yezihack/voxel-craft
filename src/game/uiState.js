@@ -39,6 +39,16 @@ export const ui = reactive({
   enchantOpen: false,
   enchantTarget: 0,
 
+  /* ---- 箱子 ----
+   * chestOpen : 箱面是否打开
+   * chestPos  : 打开的是哪只箱子 { dim, x, y, z, type, name, slots }
+   * chestItems: 箱子里的东西（{ 物品id: 数量 }），与 chests.js 的容器同步
+   * 容器内容本身住在 chests.js（世界状态，存档要存）；
+   * 这里只放「界面此刻在看什么」，与 enchantTarget 同一层级。 */
+  chestOpen: false,
+  chestPos: null,
+  chestItems: {},
+
   /* ---- 世界 ---- */
   worldFlat: false,            // 世界类型：false = 经典起伏，true = 超平坦
 

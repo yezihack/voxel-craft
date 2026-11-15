@@ -3,6 +3,7 @@ import { nextTick, onMounted, ref } from 'vue'
 import { engine, initEngine, setFatal, ui } from './engine.js'
 import BagPanel from './components/BagPanel.vue'
 import BowBar from './components/BowBar.vue'
+import ChestPanel from './components/ChestPanel.vue'
 import Crosshair from './components/Crosshair.vue'
 import DeathScreen from './components/DeathScreen.vue'
 import DigRing from './components/DigRing.vue'
@@ -82,6 +83,7 @@ onMounted(async () => {
   <HotBar />
   <BagPanel />
   <EnchantPanel />
+  <ChestPanel />
   <DeathScreen />
   <Toast />
   <TouchControls />

@@ -63,6 +63,103 @@ export function cobbleBase(s, c, seeds, tone) {
   }
 }
 
+/* 箱子贴图的共用画法（见 TILE_GEN 里的 chest_* 各条）。
+ *
+ * 两种材质：wood（木板，横向纹理 + 钉痕）与金属/石质（竖向拉丝 + 铆钉）。
+ * 末影箱用 void 标志：底色压到近黑，再叠一层流动的紫纹 —— 它不该「亮」，
+ * 而该「深不见底」，所以只加极少量紫色高光点，不做整体提亮。 */
+function chestTop(s, c, o) {
+  const band = o.band
+  for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++) {
+    let d = (hash2(x >> 1, y >> 1, s) - 0.5) * 18 + (hash2(x, y, s + 5) - 0.5) * 7
+    if (o.wood) {
+      /* 木板：横向板条，每 8 行一道深缝；再叠竖向短划（木纹） */
+      if (y % 8 === 0) d -= 26;
+      else if (y % 8 === 1) d += 12;
+      d += (hash2(x >> 2, y, s + 11) - 0.5) * 10;
+    } else {
+      d += (hash2(x, y >> 2, s + 11) - 0.5) * 8;
+    }
+    P(x, y, shade(c, d))
+  }
+  /* 外框包边：最外两行/列换成金属边 */
+  for (let x = 0; x < TP; x++) {
+    P(x, 0, shade(band, -18)); P(x, 1, shade(band, 8));
+    P(x, TP - 1, shade(band, -26)); P(x, TP - 2, shade(band, 4));
+  }
+  for (let y = 0; y < TP; y++) {
+    P(0, y, shade(band, -22)); P(1, y, shade(band, 6));
+    P(TP - 1, y, shade(band, -30)); P(TP - 2, y, shade(band, 2));
+  }
+  /* 锁扣：从盖子中央伸出来的一小段（俯视时正对箱子正面） */
+  const lx0 = TPH - 2, lx1 = TPH + 1;
+  for (let y = TP - 6; y < TP - 1; y++)
+    for (let x = lx0; x <= lx1; x++)
+      P(x, y, shade(o.lock || band, (x === lx0 || x === lx1) ? -30 : 6));
+  /* 四角铆钉 */
+  for (const [rx, ry] of [[4, 4], [TP - 5, 4], [4, TP - 5], [TP - 5, TP - 5]]) {
+    P(rx, ry, shade(band, 34)); P(rx + 1, ry, shade(band, 10));
+    P(rx, ry + 1, shade(band, 10)); P(rx + 1, ry + 1, shade(band, -22));
+  }
+  if (o.void) {
+    /* 末影：深黑底 + 稀疏紫点，像凝视深渊 */
+    for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++) {
+      if (hash2(x >> 1, y >> 1, s + 21) > 0.90) P(x, y, shade(c, 26));
+      else if (hash2(x >> 2, y >> 2, s + 33) < 0.12) P(x, y, shade(c, -8));
+    }
+  }
+}
+
+function chestSide(s, c, o) {
+  const band = o.band
+  for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++) {
+    let d = (hash2(x, y >> 1, s) - 0.5) * 16 + (hash2(x >> 1, y >> 1, s + 7) - 0.5) * 9
+    if (o.wood) {
+      /* 竖向板条：每 6 列一道深缝 */
+      if (x % 6 === 0) d -= 24;
+      else if (x % 6 === 1) d += 10;
+      d += (hash2(x, y >> 2, s + 13) - 0.5) * 9;
+    }
+    P(x, y, shade(c, d))
+  }
+  /* 上沿 = 盖子边（比箱身亮一档，一眼看出哪里是盖） */
+  for (let x = 0; x < TP; x++) {
+    P(x, 0, shade(band, -20)); P(x, 1, shade(band, 10));
+    P(x, 2, shade(c, 16));
+    for (let y = 3; y < TP; y++) P(x, y, shade(c, (hash2(x, y >> 1, s) - 0.5) * 16));
+  }
+  /* 底沿包边 */
+  for (let x = 0; x < TP; x++) { P(x, TP - 1, shade(band, -32)); P(x, TP - 2, shade(band, -6)) }
+  /* 竖向包边（四条棱） */
+  for (let y = 0; y < TP; y++) {
+    P(0, y, shade(band, -24)); P(1, y, shade(band, 6));
+    P(TP - 1, y, shade(band, -30)); P(TP - 2, y, shade(band, 2));
+  }
+  /* 锁扣：正中一块金属片 + 中缝 + 钥匙孔 */
+  const lx0 = TPH - 3, lx1 = TPH + 2;
+  const ly0 = TPH - 3, ly1 = TPH + 4;
+  for (let y = ly0; y <= ly1; y++)
+    for (let x = lx0; x <= lx1; x++) {
+      const edge = x === lx0 || x === lx1 || y === ly0 || y === ly1
+      P(x, y, shade(o.lock || band, edge ? -26 : 8))
+    }
+  /* 中缝 + 钥匙孔（两格宽，2 倍放大后才看得清） */
+  for (let y = ly0 + 1; y <= ly1 - 1; y++) P(TPH, y, shade(o.lock || band, -40))
+  P(TPH, ly1 - 1, shade([24, 20, 26], 0)); P(TPH - 1, ly1 - 1, shade([24, 20, 26], 0))
+  P(TPH + 1, ly1 - 1, shade([24, 20, 26], 0)); P(TPH, ly1, shade([24, 20, 26], 0))
+  /* 四角铆钉 */
+  for (const [rx, ry] of [[4, 6], [TP - 6, 6], [4, TP - 6], [TP - 6, TP - 6]]) {
+    P(rx, ry, shade(band, 30)); P(rx + 1, ry, shade(band, 8));
+    P(rx, ry + 1, shade(band, 8)); P(rx + 1, ry + 1, shade(band, -24));
+  }
+  if (o.void) {
+    for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++) {
+      if (hash2(x >> 1, y >> 1, s + 21) > 0.91) P(x, y, shade(c, 24));
+      else if (hash2(x >> 2, y >> 2, s + 33) < 0.10) P(x, y, shade(c, -6));
+    }
+  }
+}
+
 export const TILE_GEN = {
   grass_top(s, c) {
     const d = shade(c, -24), l = shade(c, 22);
@@ -1028,9 +1125,28 @@ export const TILE_GEN = {
       P(x, 1, shade(c, -44)); P(x, TP - 2, shade(c, -36));
     }
   },
+  /* ---------------- 箱子 ----------------
+   * 四种箱子共用一套画法，只换「木/铁/金/末影」四种材质参数。
+   *
+   *   顶面 = 箱盖：横向木板 + 一道包边（俯视时能看出是个盖子）
+   *   侧面 = 箱身：竖向板条 + 中间的锁扣 + 四角包边
+   *
+   * 为什么侧面也画锁扣：本作的方块贴图**没有方向性** —— 六个面共用
+   * top/side/bot 三张图，箱子不能像 MC 那样转朝向。所以锁扣画在**所有**
+   * 侧面正中，四面看过去都是「箱子正面」，这是无朝向贴图下的正确取舍。
+   *
+   * ⚠ 坐标一律用 TP / TPH，不写裸 16 / 15（见文件头纪律）。 */
+  chest_wood_top(s, c) { chestTop(s, c, { wood: true, band: [96, 68, 42] }) },
+  chest_wood_side(s, c) { chestSide(s, c, { wood: true, band: [96, 68, 42], lock: [176, 146, 82] }) },
+  chest_iron_top(s, c) { chestTop(s, c, { band: [108, 112, 120] }) },
+  chest_iron_side(s, c) { chestSide(s, c, { band: [108, 112, 120], lock: [196, 200, 208] }) },
+  chest_gold_top(s, c) { chestTop(s, c, { band: [166, 122, 32] }) },
+  chest_gold_side(s, c) { chestSide(s, c, { band: [166, 122, 32], lock: [246, 214, 110] }) },
+  chest_ender_top(s, c) { chestTop(s, c, { band: [58, 38, 82], void: true }) },
+  chest_ender_side(s, c) { chestSide(s, c, { band: [58, 38, 82], lock: [140, 96, 216], void: true }) },
+
   /* 矿车车身：金属板 + 铆钉。整张不透明 —— 它是实体网格，不走镂空。 */
-  cart_metal(s, c) {
-    for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++)
+  cart_metal(s, c) {    for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++)
       P(x, y, shade(c, (hash2(x >> 1, y >> 1, s) - 0.5) * 16 - (y > TP - 4 ? 26 : 0)));
     for (const rx of [4, TPM - 4]) for (const ry of [4, TPM - 4]) {   // 四角铆钉
       P(rx, ry, shade(c, 40)); P(rx + 1, ry, shade(c, -40));
@@ -1578,6 +1694,84 @@ export function itemTile(name, s, c) {
     const mode = key === 'heal' ? 'heal' : (key === 'poison' || key === 'slow') ? 'debuff' : 'normal';
     return potionIconTile(s, c, mode);
   }
+  /* --- 箱子战利品里的稀有物资 ---
+   * 四样东西形状刻意拉开：面包（椭圆面包 + 划痕）、绿宝石（菱形切面）、
+   * 末影珍珠（深色球 + 紫色纹）、下界之星（六芒星 + 中心亮芯）。 */
+  if (name === 'item_bread') {
+    /* 面包：底部宽顶部收的椭圆，顶部三道斜划（烘焙裂纹） */
+    for (let y = 4; y <= 12; y++) {
+      const t = (y - 4) / 8
+      const half = Math.round(4 + Math.sin(t * Math.PI) * 3)
+      for (let x = 8 - half; x <= 7 + half; x++) {
+        let d = (hash2(x, y, s) - 0.5) * 20
+        /* 底部压暗、顶部受光 */
+        d += (1 - t) * 22 - 14
+        PQ(x, y, shade(c, d))
+      }
+    }
+    /* 三道烘焙裂纹（深色短线） */
+    for (const [x0, y0] of [[5, 6], [8, 7], [11, 6]]) {
+      PQ(x0, y0, shade(c, -48)); PQ(x0 + 1, y0, shade(c, -38))
+    }
+    /* 左上高光 */
+    PQ(5, 5, shade(c, 40)); PQ(6, 5, shade(c, 28))
+    return;
+  }
+  if (name === 'item_emerald') {
+    /* 绿宝石：菱形切面，中间亮、边缘暗，底部带一点反光 */
+    for (let y = 2; y <= 13; y++) {
+      const half = y <= 7 ? y - 1 : 13 - y
+      for (let x = 7 - half; x <= 8 + half; x++) {
+        const d = (hash2(x, y, s) - 0.5) * 14
+        const edge = Math.abs(x - 7.5) + Math.abs(y - 7.5) > 4.4
+        PQ(x, y, shade(c, edge ? -34 : d + 12))
+      }
+    }
+    /* 上半部更亮：模拟切面反射 */
+    for (let y = 3; y <= 7; y++) {
+      const half = y - 1
+      for (let x = 7 - half + 1; x <= 8 + half - 1; x++) PQ(x, y, shade(c, 26))
+    }
+    PQ(6, 4, shade(c, 52)); PQ(7, 3, shade(c, 44))
+    return;
+  }
+  if (name === 'item_ender_pearl') {
+    /* 末影珍珠：深色球体，青色纹路在里面游动 */
+    for (let y = 2; y <= 13; y++) {
+      const half = Math.round(Math.sqrt(Math.max(0, 36 - (y - 7.5) * (y - 7.5) * 1.7)))
+      for (let x = 7 - half; x <= 8 + half; x++) {
+        const dx = (x - 7.5) / (half || 1), dy = (y - 7.5) / (half || 1)
+        const d = Math.sqrt(dx * dx + dy * dy)
+        PQ(x, y, shade(c, d > 0.72 ? -30 : (hash2(x, y, s) - 0.5) * 18))
+      }
+    }
+    /* 内部游纹：一条青色的 S 形 */
+    for (let i = 0; i < 7; i++) {
+      const x = 4 + i, y = 5 + Math.round(Math.sin(i * 0.9) * 2.4)
+      PQ(x, y, shade(c, 40)); PQ(x, y + 1, shade(c, 22))
+    }
+    PQ(5, 4, shade(c, 56))
+    return;
+  }
+  if (name === 'item_nether_star') {
+    /* 下界之星：六芒星。星芒由 6 个方向的菱形臂组成 */
+    for (let y = 1; y <= 14; y++) {
+      for (let x = 1; x <= 14; x++) {
+        const dx = x - 7.5, dy = y - 7.5
+        const r = Math.sqrt(dx * dx + dy * dy)
+        const a = Math.atan2(dy, dx)
+        /* 六芒：臂在 6 个方向上伸出，靠角度周期函数判断 */
+        const spike = Math.abs(Math.cos(a * 3))
+        if (r < 7.2 - (r > 2.4 ? (r - 2.4) * spike * 1.15 : 0)) {
+          const d = (hash2(x, y, s) - 0.5) * 16
+          PQ(x, y, shade(c, d + (r < 2.6 ? 26 : 0)))
+        }
+      }
+    }
+    PQ(7, 7, shade(c, 60)); PQ(8, 7, shade(c, 44)); PQ(7, 8, shade(c, 44)); PQ(8, 8, shade(c, 24))
+    return;
+  }
+
   /* --- 傀儡核心：一枚带「发光眼」的圆角方块 ---
    * 不加这一支的话会掉进下面的「肉」兜底分支，三枚核心全长得像猪排。 */
   const gm = /^item_golem_(\w+)$/.exec(name);

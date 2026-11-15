@@ -222,11 +222,15 @@ export function emitHouse(out, x, z, w, d, g, seed) {
     for (let dx = -1; dx <= w; dx++)
       for (let dz = z0; dz <= z1; dz++) out.push([x + dx, y, z + dz, I.DARKPLANK]);
   }
-  // 室内陈设：灯 + 床 + 书架
+  // 室内陈设：灯 + 床 + 书架 + 木箱
   out.push([x + w - 2, top, z + d - 2, I.LAMP]);
   out.push([x + 1, g + 1, z + d - 2, I.WOOL_RED]);
   out.push([x + 2, g + 1, z + d - 2, I.WOOL_RED]);
   out.push([x + w - 2, g + 1, z + 1, I.BOOKSHELF]);
+  /* 木箱：贴着书架放，屋里就有「可以搜刮的东西」了。
+   * 箱子内容是**惰性生成**的（第一次打开才 roll 战利品），
+   * 所以这里只需要摆一个方块 —— 见 chests.js 的 openChest。 */
+  out.push([x + w - 3, g + 1, z + 1, I.BOX_WOOD]);
 }
 
 /* ---- 一片农田：水渠 + 作物垄 ---- */
@@ -287,6 +291,8 @@ export function emitSmithy(out, x, z, g, seed) {
   out.push([x + w - 2, g + 1, z + 2, I.IRON]);
   out.push([x + 2, g + 1, z + d - 2, I.QUARTZ]);
   out.push([x + 3, g + 1, z + d - 2, I.QUARTZ]);
+  /* 铁匠铺放铁箱：工具与建材的存放处，比村里的木箱高一档。 */
+  out.push([x + w - 3, g + 1, z + d - 3, I.BOX_IRON]);
   // 屋顶
   for (let y = g + 5; y <= g + 6; y++)
     for (let dx = -1; dx <= w; dx++)
@@ -421,9 +427,14 @@ export function collectRuin(a, out) {
           (y > g + 1 && rndAt(cx + dx, k + 99, cz + dz, seed) < 0.22);
         if (skip) { if (++gapRun > 2) break; continue; }
         gapRun = 0;
-        out.push([cx + dx, y, cz + dz, rndAt(cx + dx, k, cz + dz, seed + 83) < 0.38 ? I.MOSS : I.STONEBRICK]);
-      }
+out.push([cx + dx, y, cz + dz, rndAt(cx + dx, k, cz + dz, seed + 83) < 0.38 ? I.MOSS : I.STONEBRICK]);
     }
+  }
+  /* 塔基里的金箱：遗迹是「前文明」的遗物，箱子比村里的高一档。
+   * 位置取塔心（内部中空，只铺了一圈墙），所以箱子摆在正中是悬空的 ——
+   * 补一块地板方块把它垫起来。 */
+  out.push([cx + 2, g - 1, cz + 2, I.STONEBRICK]);
+  out.push([cx + 2, g, cz + 2, I.BOX_GOLD]);
   // 断墙：从塔基向外延伸
   for (let s = 0; s < 3; s++) {
     const dir = Math.floor(rndAt(cx, 31 + s, cz, seed) * 4);
@@ -488,6 +499,13 @@ export function collectMine(a, out) {
       }
       if (rndAt(cx, y, cz, seed + 111) > 0.7)
         out.push([a1x, y + 2, alongX ? cz - 2 : a1z, I.GLOW]);
+      /* 坑道尽头的箱子：每隔 8 段放一只木箱，矿井才有「搜刮点」。
+       * 位置在坑道边上（不是正中），免得挡住通行的 3 格宽。 */
+      if (i > 0 && i % 8 === 0) {
+        const bx = alongX ? cx : cx + 2;
+        const bz = alongX ? cz + 2 : cz;
+        out.push([bx, y, bz, I.BOX_WOOD]);
+      }
     }
   }
   // 侧壁换矿脉

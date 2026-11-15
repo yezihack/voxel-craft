@@ -3,7 +3,8 @@
  * 所有「用户点了界面上某个东西」要触发的逻辑都在这里导出，组件只管调用，
  * 不去碰引擎内部状态。原先散落在 onclick / addEventListener 里的代码全部收拢到此。 */
 import { audio, blip } from './audio.js'
-import { doBreak, doPlace, setOpenEnchantHook } from './actions.js'
+import { CHEST_TYPES, openChest as openChestView, writeChest } from './chests.js'
+import { doBreak, doPlace, setOpenChestHook, setOpenEnchantHook } from './actions.js'
 import { armorAt, armorPoints, armorReduction, setArmorPiece } from './armor.js'
 import { despawnAllBots, despawnAllBotDrops } from './bots.js'
 import { despawnAllCarts } from './carts.js'
@@ -21,7 +22,7 @@ import { arrows, despawnAllMobs, surfaceY } from './mobs.js'
 import { player } from './player.js'
 import { canvas } from './renderer.js'
 import { countEdits, deleteSave, exportSaveJson, hasSave, importSaveJson, loadGame, saveGame, saveMeta } from './save.js'
-import { HOTBAR_N, activeSlots, cancelDig, heldId, invAdd, invCount, invTake, respawn } from './survival.js'
+import { HOTBAR_N, SLOT_N, activeSlots, cancelDig, heldId, invAdd, invCount, invSlots, invTake, respawn } from './survival.js'
 import {
   MODE, SEED, bowCharge, breakHeld, dim, flatWorld, lookVec, mode, paused, placeHeld,
   placeRepeat, running, selected, setBowCharge, setBreakHeld, setColCache,
@@ -200,6 +201,7 @@ export function startGame(wantLock = true) {
   audio()
   if (ui.bagOpen) closeBag(true)
   if (ui.enchantOpen) closeEnchant(true)
+  if (ui.chestOpen) closeChest(true)
   setRunning(true)
   setPaused(false)
   ui.started = true
@@ -229,6 +231,7 @@ export function pauseGame() {
  * 就退化成显示暂停遮罩 —— 点一下即可继续，不会卡死。 */
 export function openBag() {
   if (ui.enchantOpen) closeEnchant(true)   // 两个面板互斥，不然会叠在一起
+  if (ui.chestOpen) closeChest(true)
   ui.bagOpen = true
   ui.veilVisible = false
   if (document.pointerLockElement === canvas) document.exitPointerLock()
@@ -363,6 +366,113 @@ export function enchantInscribe(key) {
  * 这和 bots.js 的 installBotHook 是同一个坑，解法也一样：
  * 由一个「一切都就位之后」的时机来装，即 boot()。 */
 export function installEnchantHook() { setOpenEnchantHook(openEnchant) }
+
+/* ---------------- 箱子 ----------------
+ * 规则和背包完全同构：打开 = 退出指针锁（拿不到就手动暂停），关闭 = 请求锁回来。
+ * 三个面板（背包 / 附魔台 / 箱子）互斥 —— 同时开着的话 Esc 只能关掉其中一个。 */
+export function openChest(hit) {
+  if (!hit) return false
+  if (ui.bagOpen) closeBag(true)
+  if (ui.enchantOpen) closeEnchant(true)
+  /* ⚠ seed 必须传（世界种子）—— 不传的话 rollLoot 里
+   * base = (... + undefined)|0 = 0，全世界的箱子首开战利品都一样。 */
+  const view = openChestView(dim, hit.x, hit.y, hit.z, hit.id, SEED)
+  if (!view) return false
+  ui.chestOpen = true
+  ui.chestPos = { dim, x: hit.x, y: hit.y, z: hit.z, type: view.type, name: view.name, slots: view.slots }
+  ui.chestItems = view.items
+  ui.veilVisible = false
+  if (document.pointerLockElement === canvas) document.exitPointerLock()
+  else pauseGame()
+  blip(520, 0.08, 'sine', 0.045)
+  return true
+}
+
+export function closeChest(silent) {
+  if (!ui.chestOpen) return
+  ui.chestOpen = false
+  ui.chestPos = null
+  ui.chestItems = {}
+  if (ui.touch) { startGame(false); return }
+  requestLockSafe()
+  if (!silent) blip(360, 0.06, 'sine', 0.04)
+}
+
+/* 把「开箱」接回 actions.js 的右键分派（那边不能反向 import 本模块）。
+ * ⚠ 和 installEnchantHook 同理：**不能在模块顶层调用** ——
+ *   actions ↔ uiActions 本来就有一条环，顶层装会撞 TDZ。由 boot() 调。 */
+export function installChestHook() { setOpenChestHook(openChest) }
+
+/* 取出：把箱子里某样东西全部挪进背包。
+ * 背包放不下就少拿 —— 宁可分几次拿完，也不要凭空吞掉。 */
+export function chestTake(id) {
+  const items = ui.chestItems
+  const n = items[id] | 0
+  if (!n) return false
+  /* inv 按「id → 数量」记账，一个 id 只占一格。已经持有该 id 时
+   * 直接往那格上加数量就行；没持有才需要一个新的空格。
+   * 注意方向：是从箱子 → 背包，只 invAdd，绝不能 invTake（那会
+   * 从背包里扣，而背包里根本没有这东西）。 */
+  if (invCount(id) <= 0) {
+    const room = SLOT_N - invSlots.filter(Boolean).length
+    if (room <= 0) {
+      toast('背包满了 —— 先腾出格子再来拿')
+      blip(200, 0.08, 'square', 0.03)
+      return false
+    }
+  }
+  invAdd(id, n)
+  delete items[id]
+  syncChest()
+  blip(700, 0.05, 'sine', 0.035)
+  return true
+}
+
+/* 存入：把背包里的某样东西放进箱子。
+ * 箱子的容量是「不同物品的堆数」上限 —— 满了就放不进去。 */
+export function chestPut(id) {
+  const have = invCount(id)
+  if (have <= 0) return false
+  const items = ui.chestItems
+  const kinds = Object.keys(items).length
+  const isNew = items[id] === undefined
+  if (isNew && kinds >= chestCapacity()) {
+    toast('箱子满了 —— 腾出一格再放')
+    blip(200, 0.08, 'square', 0.03)
+    return false
+  }
+  invTake(id, 1)
+  items[id] = (items[id] || 0) + 1
+  syncChest()
+  blip(560, 0.05, 'sine', 0.03)
+  return true
+}
+
+/* 一键全取：把箱子里所有东西都搬进背包（能放多少放多少）。 */
+export function chestTakeAll() {
+  const ids = Object.keys(ui.chestItems)
+  if (!ids.length) return false
+  let moved = 0
+  for (const id of ids) if (chestTake(+id)) moved++
+  if (moved) toast('取出 ' + moved + ' 种物品')
+  return moved > 0
+}
+
+/* 箱子容量（当前打开的这只） */
+export function chestCapacity() {
+  const p = ui.chestPos
+  if (!p) return 0
+  const t = CHEST_TYPES[p.type]
+  return t ? t.slots : 9
+}
+
+/* 把界面上的箱子内容写回容器（存档前也靠它保证一致）。 */
+function syncChest() {
+  const p = ui.chestPos
+  if (!p) return
+  writeChest(p.dim, p.x, p.y, p.z, ui.chestItems)
+  ui.chestItems = { ...ui.chestItems }
+}
 
 /* ---------------- 存档 ---------------- */
 
@@ -564,6 +674,7 @@ export function touchPlace(on) {
  * 本不该出现的状态里才有意义，但按「后开的先关」总不会错。 */
 export function onEscape() {
   if (ui.enchantOpen) { closeEnchant(); return }
+  if (ui.chestOpen) { closeChest(); return }
   if (ui.bagOpen) closeBag()
 }
 
