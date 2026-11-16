@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { engine, ui } from '../engine.js'
 import { toast } from '../game/uiState.js'
+import { normalizeAlias } from '../game/aliasName.js'
 import { MODES } from '../data/modes.js'
 import { VEIL_KEYS } from '../data/veilKeys.js'
 import { WORLDS } from '../data/worlds.js'
@@ -47,9 +48,8 @@ function continueSave() {
 }
 
 /* ---------------- 云端存档（Cloudflare D1） ----------------
- * 匿名 UUID 是「无感」身份：不登录、不显示，档跟着这台浏览器走。
- * 但完全不可见就没法验证云同步、也没法换设备取回 —— 所以这里把存档码
- * 显式露出来，并允许粘贴另一台设备的码认领云端存档。
+ * 身份 = 匿名 UUID（存档码，精确但难记）+ 玩家自选别名（好记，绑在 D1）。
+ * 两者指向同一个 owner；saves / edits 永远只按 owner 存，别名不参与主键。
  *
  * ⚠ 时序：StartVeil 比 App.onMounted 更早挂载，首帧 engine.cloudMeta
  * 还是 NOT_READY_KEYS 的 noop（返回 null）。必须等 ui.engineReady 再查，
@@ -57,8 +57,28 @@ function continueSave() {
 const cloudMeta = ref(null)         // 有档时 { has,t,dim,mode,flat,blocks }，否则 null
 const cloudState = ref('checking')  // checking | empty | ok | offline
 const ownerCode = ref('')
+const aliasName = ref('')
+const aliasOpen = ref(false)
+const aliasInput = ref('')
+const aliasBusy = ref(false)
 const claimOpen = ref(false)
 const claimCode = ref('')
+const claimBusy = ref(false)
+
+/* 首次引导：没设过别名时提示一次，玩家点「暂不」就永久收起。
+ * 离线 / 还在检查时不提示 —— 那两种状态下别名根本设不上，提示了是空头支票。
+ * 之后仍可随时点云端行的「设置别名」按钮进入。 */
+const GUIDE_KEY = 'voxel-craft:alias-guide'
+function readGuide() {
+  try { return typeof localStorage !== 'undefined' && localStorage.getItem(GUIDE_KEY) === '1' } catch { return false }
+}
+const guideDismissed = ref(readGuide())
+function dismissGuide() {
+  guideDismissed.value = true
+  try { if (typeof localStorage !== 'undefined') localStorage.setItem(GUIDE_KEY, '1') } catch { /* 隐私模式 */ }
+}
+const showGuide = computed(() => ui.engineReady && !aliasName.value && !guideDismissed.value
+  && cloudState.value !== 'checking' && cloudState.value !== 'offline')
 
 const cloudLabel = computed(() => {
   if (cloudState.value === 'checking') return '正在连接云端…'
@@ -74,6 +94,10 @@ async function refreshCloud() {
   try { m = await engine.cloudMeta() } catch { m = null }
   cloudMeta.value = m && m.has ? m : null
   cloudState.value = m && m.has ? 'ok' : (m && m.has === false ? 'empty' : 'offline')
+  /* 别名跟着 owner 变：认领到别人的档之后要显示那份档的别名。 */
+  if (engine.getAlias) {
+    try { aliasName.value = (await engine.getAlias()) || '' } catch { /* 保留上次值 */ }
+  }
   return m
 }
 
@@ -94,22 +118,69 @@ async function copyOwner() {
   } catch { toast('请长按存档码手动复制') }
 }
 
-/* 认领：换 owner → 查云端 → 有档就直接载入并进游戏；没档则还原身份，
- * 避免把当前世界误推到别人的空档位上。 */
+/* 设置 / 修改别名。校验规则与后端共用 aliasName.js，不会出现
+ * 「面板说合法、点保存被拒」的规则漂移。 */
+function openAlias() {
+  aliasOpen.value = true
+  claimOpen.value = false
+  aliasInput.value = aliasName.value || ''
+}
+async function saveAlias() {
+  if (aliasBusy.value) return
+  const name = (aliasInput.value || '').trim()
+  if (!normalizeAlias(name)) {
+    toast('⚠ 别名 2–20 字，可用中文 / 字母 / 数字 / _ / -')
+    return
+  }
+  aliasBusy.value = true
+  const r = engine.setAlias ? await engine.setAlias(name) : null
+  aliasBusy.value = false
+  if (r && r.ok) {
+    aliasName.value = String(r.alias || name)
+    aliasOpen.value = false
+    guideDismissed.value = true
+    toast('✓ 别名已设置，换设备输入它就能找回存档')
+  } else if (r && r.reason === 'taken') {
+    toast('⚠ 这个别名已被占用，换一个试试')
+  } else if (r && r.reason === 'invalid') {
+    toast('⚠ 别名格式不对')
+  } else {
+    toast('⚠ 设置失败，请检查网络')
+  }
+}
+
+/* 认领：输入别名或存档码 → 解析成 owner → 换身份 → 查云端 → 载入并进游戏。
+ * 没档则还原身份，避免把当前世界误推到别人的空档位上。 */
 async function doClaim() {
-  const code = (claimCode.value || '').trim()
-  if (!code) return
+  const input = (claimCode.value || '').trim()
+  if (!input || claimBusy.value) return
   const prev = ownerCode.value
-  if (!engine.setOwner || !engine.setOwner(code)) { toast('⚠ 存档码格式不对'); return }
+  claimBusy.value = true
+  let owner = null
+  if (engine.resolveOwner) {
+    try { owner = await engine.resolveOwner(input) } catch { owner = null }
+  }
+  if (!owner) {
+    claimBusy.value = false
+    toast('⚠ 找不到这个别名或存档码')
+    return
+  }
+  if (!engine.setOwner || !engine.setOwner(owner)) {
+    claimBusy.value = false
+    toast('⚠ 存档码格式不对')
+    return
+  }
   const m = await refreshCloud()
   if (!m || !m.has) {
     if (prev) engine.setOwner(prev)
     await refreshCloud()
-    toast('⚠ 这个存档码没有云端存档')
+    claimBusy.value = false
+    toast('⚠ 这个别名 / 存档码没有云端存档')
     return
   }
   claimOpen.value = false
   const r = await engine.loadFromCloud()
+  claimBusy.value = false
   if (r && r.ok) {
     ui.saveRev++
     toast('✓ 已从云端载入存档')
@@ -123,22 +194,6 @@ function startNew() {
   if (typeof window !== 'undefined' && window.confirm
       && !window.confirm('删除当前存档并重新开始？这个操作无法撤销。')) return
   engine.newWorld()
-}
-
-/* ---------- 存档文件导出 / 导入 ----------
- * localStorage 会被「清理浏览器数据」或 iOS 的存储回收整份抹掉，
- * 光存在浏览器里就是丢档风险。导出成文件后档在玩家手里；
- * 导入 = 用文件覆盖浏览器存档并立即读进世界。 */
-const fileEl = ref(null)
-
-function pickFile() {
-  fileEl.value?.click()
-}
-
-async function onFile(e) {
-  const f = e.target.files && e.target.files[0]
-  e.target.value = ''        // 同一个文件选第二次也要触发 change，必须清空
-  if (f) await engine.importSaveFile(f)
 }
 </script>
 
@@ -195,29 +250,39 @@ async function onFile(e) {
         </button>
       </div>
 
-      <!-- 存档文件导入 / 导出：浏览器存储会被清空或回收，档得能落到玩家手里 -->
-      <div class="saverow">
-        <button class="iobtn" @click="engine.exportSave()">
-          ⬇ 导出存档
-          <span class="savemeta">下载 .json 文件，防清浏览器数据丢档</span>
-        </button>
-        <button class="iobtn" @click="pickFile">
-          ⬆ 导入存档
-          <span class="savemeta">选择导出的 .json，导入后直接进入该世界</span>
-        </button>
-        <input ref="fileEl" type="file" accept=".json,application/json" hidden @change="onFile">
-      </div>
-
-      <!-- 云端存档状态 + 存档码：匿名 UUID 默认完全不可见，这里显式暴露，
-           既能验证 D1 是否真的在同步，也能抄到另一台设备认领。 -->
+      <!-- 云端身份：状态 + 别名 + 认领。存档码弱化到第二行 ——
+           日常用别名，UUID 只在需要精确指定时才用。 -->
       <div class="cloudrow">
         <span class="cloudstat" :class="cloudState">☁️ {{ cloudLabel }}</span>
-        <button class="codebtn" :title="ownerCode || '存档码'" @click="copyOwner"><code>{{ ownerCode || '——' }}</code> ⧉</button>
-        <button class="codebtn" @click="claimOpen = !claimOpen">认领</button>
+        <button
+          class="tagbtn" :class="{ unset: !aliasName }"
+          :title="aliasName ? '点击修改别名' : '给这份存档起个好记的名字'"
+          @click="openAlias"
+        >🏷 {{ aliasName || '设置别名' }}</button>
+        <button class="codebtn" @click="claimOpen = !claimOpen; aliasOpen = false">认领</button>
+      </div>
+      <div class="idrow">
+        <span class="idlabel">存档码</span>
+        <button class="idcode" :title="ownerCode || '存档码'" @click="copyOwner"><code>{{ ownerCode || '——' }}</code> ⧉</button>
+      </div>
+
+      <!-- 第一次使用：引导设置别名。可「暂不」，之后仍能从上面的按钮进入。 -->
+      <div v-if="showGuide" class="aliasguide">
+        <span class="guidetext">💡 给存档起个好记的名字，换设备时输入别名就能找回，不用抄一长串存档码</span>
+        <button class="guidebtn" @click="openAlias">去设置</button>
+        <button class="guidebtn ghost" @click="dismissGuide">暂不</button>
+      </div>
+      <div v-if="aliasOpen" class="claimrow">
+        <input
+          v-model="aliasInput" type="text" maxlength="20" spellcheck="false"
+          placeholder="2–20 字：中文 / 字母 / 数字 / _ / -" @keyup.enter="saveAlias"
+        >
+        <button :disabled="aliasBusy" @click="saveAlias">保存</button>
+        <button class="ghost" @click="aliasOpen = false">取消</button>
       </div>
       <div v-if="claimOpen" class="claimrow">
-        <input v-model="claimCode" type="text" spellcheck="false" placeholder="粘贴另一台设备的存档码" @keyup.enter="doClaim">
-        <button @click="doClaim">载入</button>
+        <input v-model="claimCode" type="text" spellcheck="false" placeholder="输入别名或存档码" @keyup.enter="doClaim">
+        <button :disabled="claimBusy" @click="doClaim">载入</button>
       </div>
 
       <!-- 宣传页入口：访客最先想知道的「这游戏长什么样」。
@@ -365,34 +430,6 @@ async function onFile(e) {
   letter-spacing: 0;
 }
 
-/* 导入 / 导出：比「继续存档」低一档的次要操作，用中性描边 ——
- * 不抢主路径的视觉，但两枚等宽并排，触屏上也是舒适的热区 */
-.iobtn {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: 8px 14px;
-  border-radius: 11px;
-  cursor: pointer;
-  border: 1.5px solid rgba(255, 255, 255, .16);
-  background: rgba(255, 255, 255, .04);
-  color: var(--txt);
-  font: inherit;
-  font-size: 12.5px;
-  text-align: left;
-  transition: background .12s, border-color .12s;
-}
-
-.iobtn:hover {
-  background: rgba(255, 255, 255, .10);
-  border-color: rgba(255, 255, 255, .35)
-}
-
-.iobtn .savemeta {
-  font-size: 10px
-}
-
 /* 宣传页入口：比存档操作更轻，用主题绿的细描边 —— 它是「了解」而不是「操作」 */
 .promolink {
   display: flex;
@@ -451,9 +488,7 @@ async function onFile(e) {
   margin: 0 2px
 }
 
-/* ---------- 云端存档 / 存档码 ----------
- * 一行里塞下「状态 + 完整 UUID + 认领」，不能再多占纵向空间 ——
- * 面板在手机上本来就接近一屏高度。 */
+/* ---------- 云端身份：状态 / 别名 / 存档码 ---------- */
 .cloudrow {
   display: flex;
   align-items: center;
@@ -476,13 +511,37 @@ async function onFile(e) {
 .cloudstat.offline { color: #f0a37e }
 .cloudstat.checking { opacity: .75 }
 
-/* 存档码整串可点复制，也允许长按选中（剪贴板 API 被拒时的退路） */
+/* 别名 chip：已设置用主题色实心，未设置用虚线框当引导入口 */
+.tagbtn {
+  flex: 0 0 auto;
+  max-width: 38%;
+  padding: 5px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1.5px solid rgba(67, 224, 255, .48);
+  background: rgba(67, 224, 255, .13);
+  color: var(--accent);
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tagbtn.unset {
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, .30);
+  background: rgba(255, 255, 255, .04);
+  color: var(--dim);
+  font-weight: 400;
+}
+
+.tagbtn:hover { border-color: var(--accent); color: var(--accent) }
+
 .codebtn {
   flex: 0 0 auto;
-  /* 存档码优先完整显示：空间不够时让左边的状态文字去省略，
-   * 而不是把 UUID 截掉一半（那正是「看不到存档码」的来源）。 */
-  max-width: none;
-  padding: 5px 9px;
+  padding: 5px 10px;
   border-radius: 8px;
   cursor: pointer;
   border: 1.5px solid rgba(255, 255, 255, .16);
@@ -491,18 +550,83 @@ async function onFile(e) {
   font: inherit;
   font-size: 10.5px;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.codebtn code {
-  font-family: ui-monospace, Consolas, monospace;
-  font-size: 10px;
 }
 
 .codebtn:hover {
   background: rgba(255, 255, 255, .10);
   border-color: rgba(255, 255, 255, .35)
+}
+
+/* 存档码单独一行，弱化但仍可点复制 / 长按选中（剪贴板被拒时的退路） */
+.idrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 10.5px;
+  color: var(--dim);
+}
+
+.idlabel { flex: 0 0 auto; opacity: .8 }
+
+.idcode {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 9px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1.5px solid rgba(255, 255, 255, .10);
+  background: rgba(0, 0, 0, .18);
+  color: var(--dim);
+  font: inherit;
+  font-size: 10px;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.idcode code {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 10px;
+  letter-spacing: .2px;
+}
+
+.idcode:hover { color: var(--txt); border-color: rgba(255, 255, 255, .30) }
+
+/* 首次引导条：只占一行，不抢「开始游戏」的视觉 */
+.aliasguide {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  border: 1px dashed rgba(126, 200, 80, .36);
+  background: rgba(126, 200, 80, .06);
+  text-align: left;
+  font-size: 10.5px;
+  color: rgba(255, 255, 255, .72);
+}
+
+.guidetext { flex: 1; min-width: 0; line-height: 1.45 }
+
+.guidebtn {
+  flex: 0 0 auto;
+  padding: 4px 9px;
+  border-radius: 7px;
+  cursor: pointer;
+  border: 1px solid rgba(126, 200, 80, .45);
+  background: rgba(126, 200, 80, .14);
+  color: #b6e59a;
+  font: inherit;
+  font-size: 10.5px;
+}
+
+.guidebtn.ghost {
+  border-color: rgba(255, 255, 255, .18);
+  background: transparent;
+  color: var(--dim);
 }
 
 .claimrow {
@@ -524,6 +648,7 @@ async function onFile(e) {
 }
 
 .claimrow button {
+  flex: 0 0 auto;
   padding: 7px 14px;
   border-radius: 8px;
   cursor: pointer;
@@ -534,17 +659,25 @@ async function onFile(e) {
   font-size: 11px;
 }
 
+.claimrow button:disabled { opacity: .55; cursor: default }
+
+.claimrow button.ghost {
+  border-color: rgba(255, 255, 255, .16);
+  background: transparent;
+  color: var(--dim);
+}
+
 @media (max-width: 820px) {
   .keys {
     grid-template-columns: 1fr
   }
 }
 
-/* 只有真正的手机窄屏才让 UUID 让位给省略号（title / 点击复制仍是完整码） */
+/* 手机窄屏：别名 chip 让位，状态文字优先；存档码整行可省略（title 里有全串） */
 @media (max-width: 480px) {
-  .codebtn {
-    max-width: 44%
-  }
+  .tagbtn { max-width: 34% }
+  .aliasguide { flex-wrap: wrap }
+  .guidetext { flex-basis: 100% }
 }
 
 /* 矮屏（手机横屏）：按键表 / 说明再收一档，配合 .panel 的滚动保证一屏看得完 */

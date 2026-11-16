@@ -19,6 +19,7 @@ import { chestRestore, chestSnapshot } from './chests.js'
 import { enchantRestore, enchantSnapshot } from './enchant.js'
 import { dimEdits } from './generate.js'
 import { buildEditDelta } from './cloudDelta.js'
+import { isOwnerCode, normalizeAlias } from './aliasName.js'
 import { chunks, initChunks } from './mesher.js'
 import { setWorldTime, worldTime } from './mobs.js'
 import { player } from './player.js'
@@ -172,6 +173,19 @@ export function deleteSave() {
  * （档仍在 D1 但拿不回）——这是 MVP 已知取舍，「存档码」认领留作第二阶段。 */
 
 const OWNER_KEY = 'voxel-craft:owner'
+/* 别名只做展示缓存（真值在 D1）：离线时面板仍能显示「这份档叫什么」。 */
+const ALIAS_KEY = 'voxel-craft:alias'
+
+function cachedAlias() {
+  try { return typeof localStorage !== 'undefined' ? (localStorage.getItem(ALIAS_KEY) || '') : '' } catch { return '' }
+}
+function cacheAlias(a) {
+  try {
+    if (typeof localStorage === 'undefined') return
+    if (a) localStorage.setItem(ALIAS_KEY, a)
+    else localStorage.removeItem(ALIAS_KEY)
+  } catch { /* 隐私模式禁用 */ }
+}
 
 export function getOwner() {
   try {
@@ -198,6 +212,7 @@ export function setOwner(code) {
   try {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(OWNER_KEY, c)
+      cacheAlias('')                                // 换身份别把上一位 owner 的别名闪出来
       invalidateCloud()
       return true
     }
@@ -295,6 +310,65 @@ export async function loadFromCloud() {
 export function deleteCloudSave() {
   if (typeof fetch === 'undefined') return
   fetch('/api/save', { method: 'DELETE', headers: { 'x-owner': getOwner() } }).catch(() => {})
+}
+
+/* ---------------- 存档别名（好记的名字 ↔ UUID） ----------------
+ * UUID 精确但难记；别名由玩家设置、绑在 D1 的 aliases 表上。
+ * 换设备时输入别名 → 解析回 owner → 仍走同一套 loadFromCloud。
+ * 别名**不参与存档主键**：saves / edits 永远只按 owner 存，改名不影响档。 */
+
+/* 当前 owner 的别名。无别名返回 ''，断网时退回本地展示缓存。 */
+export async function getAlias() {
+  if (typeof fetch === 'undefined') return cachedAlias()
+  try {
+    const r = await fetch('/api/alias', { headers: { 'x-owner': getOwner() } })
+    if (!r.ok) return cachedAlias()
+    const d = await r.json()
+    const a = d && d.alias ? String(d.alias) : ''
+    cacheAlias(a)
+    return a
+  } catch { return cachedAlias() }
+}
+
+/* 绑定 / 改名。返回 {ok:true, alias} 或 {ok:false, reason:'taken'|'invalid'}；
+ * 业务失败走 200 + body reason（不用 4xx，免得浏览器记控制台资源错误），
+ * 所以这里必须把 body 交给 UI 解释，不能只看 r.ok。 */
+export async function setAlias(name) {
+  if (typeof fetch === 'undefined') return null
+  try {
+    const r = await fetch('/api/alias', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', 'x-owner': getOwner() },
+      body: JSON.stringify({ name: String(name || '') }),
+    })
+    if (!r.ok) return null
+    const d = await r.json()
+    if (d && d.ok) cacheAlias(String(d.alias || ''))
+    return d
+  } catch { return null }
+}
+
+/* 按别名解析 owner（认领用）。没绑定返回 null。 */
+export async function lookupAlias(name) {
+  if (typeof fetch === 'undefined') return null
+  try {
+    const r = await fetch('/api/alias?name=' + encodeURIComponent(String(name || '').trim()), {
+      headers: { 'x-owner': getOwner() },
+    })
+    if (!r.ok) return null
+    const d = await r.json()
+    return d && d.owner ? String(d.owner) : null
+  } catch { return null }
+}
+
+/* 认领框的统一入口：存档码直接用，其余按别名查。
+ * 先判 owner code 再判别名，避免一个 10 字符的纯字母别名被当成 UUID 写进 x-owner。 */
+export async function resolveOwner(input) {
+  const s = String(input || '').trim()
+  if (!s) return null
+  if (isOwnerCode(s)) return s
+  if (!normalizeAlias(s)) return null
+  return lookupAlias(s)
 }
 
 /* 把存档应用到当前世界。
@@ -441,17 +515,16 @@ export function loadGame() {
   return r
 }
 
-/* ---------------- 导出 / 导入 ----------------
- * localStorage 并不可靠：清浏览器数据、iOS 的 7 天回收策略、隐私模式配额，
- * 都会把档直接抹掉。所以除了浏览器存储，还得让玩家能把存档变成一个
- * 手里握着的 .json 文件 —— 丢不丢是玩家自己的事，不是浏览器的了。
+/* ---------------- 存档 JSON 编解码（UI 已移除） ----------------
+ * 云端 D1 上线后，「导出 / 导入 .json 文件」这组按钮已经从开始面板移除：
+ * 存档真源在服务端，文件交换反而容易和云端版本分叉、还要玩家自己保管。
  *
- * 导出的就是 SAVE_KEY 里那份原始 JSON（没有任何二次加工），
- * 导入则反过来：校验后原样写回 SAVE_KEY，然后走正常的 loadGame 流程。
- * 这样「导出的文件」和「浏览器里的存档」永远是同一种东西，不会分叉。 */
+ * 但下面两个纯函数**保留**：它们是存档 JSON 的唯一编解码入口，
+ * .scratch/saveio、.scratch/savehole 的往返探针仍以它们验证字段级容错；
+ * 也是将来若要做「离线文件备份」时唯一正确的起点。
+ * 注意：应用侧不要再给它们接 UI —— 导入只写本地缓存、不会推云端。 */
 
-/* 取出可导出的存档 JSON 字符串。
- * 浏览器里没档时退回内存快照（刚开局还没触发过自动存档也能导出）。 */
+/* 取存档 JSON 字符串。没档时退回内存快照。 */
 export function exportSaveJson() {
   const raw = store.get(SAVE_KEY)
   if (raw) return raw
