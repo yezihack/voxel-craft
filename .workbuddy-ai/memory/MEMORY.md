@@ -19,7 +19,8 @@
 - `structAnchor` 只调 `structAt` **一次**（原来调两遍 = 最热路径成本翻倍）。
 - `buildChunk` 开头一次性采样 chunk+1 格边进 `Int16Array`，面剔除与 AO 全走数组下标。**1 格边够用**（AO 沿面切线最多偏移 1 格）；地形纯函数，采样一次与现算等价。
 - 脏区块重建按**时间预算** `loop.js` 的 `BUILD_BUDGET_MS=6`，不是区块个数（原来 4 个 = 56~290ms 一帧）。走一格脏 16 块，按 6ms/帧摊完。
-- 效果：单 chunk 72.6ms → 12.3ms；挖方块单帧 87ms → 11.7ms（11.5fps → 85fps）。**网格输出与优化前逐字节一致**（`proto.mjs` 逐顶点对拍）。
+- 效果：单 chunk 72.6ms → 12.3ms；挖方块单帧 87ms → 11.7ms（11.5fps → 85fps）。**同机 A/B 对照（worktree 检出 HEAD~1）**：单 chunk 153.6ms → 13.7ms（11.2×），挖方块帧 14fps → 84fps。**网格输出与优化前逐字节一致**（`proto.mjs` 逐顶点对拍）。
+- 线上验收用 `online-frames.mjs`（纯 DOM，`CF_URL=`）：长任务 0 个、>100ms 帧 0 个。`after-frames.mjs` 依赖 dev server 的 `/src/game/` 模块路径，**线上（打包产物）跑不了**。
 - 别给 `getEffective` 加**全局**缓存：它读 `edits` 覆盖层是有状态的，会返回过期方块；区块局部缓存每次重建重新采样才安全。
 - 排除项（已评估，别再提）：降渲染倍率/关泛光/关 FXAA、缩短视距 `VIEW_CX/CZ`、Web Worker 化网格构建。见 `.scratch/perf/spec.md`。
 
