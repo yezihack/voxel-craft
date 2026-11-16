@@ -11,7 +11,17 @@
 ## 渲染 / 几何
 - `isOpaque(id)`：带 `shape`（cross/plate）一律不算不透明；mesher 6 面邻居剔除，薄片误判会剔掉相邻实心块的面 → 透视穿帮。
 - 超平坦结构不生树/花/水；`generate.js` flatWorld 里 `structBlockAt` 必须最前且覆盖所有 y，之后才分层。
-- 结构格 `CELL=96`，`structAt(gx,gz)` 一格一结构（`structAnchor`/`structShapeCache` 单值缓存）。矿井密度只调 `dims.js` 的 `STRUCT_FILL`/`MINE_EXTRA`/`MINE_PLAIN_TAIL`；份额用独立 hash `hash2(gx,gz,SEED+9013)` 且放在群系分支之前，复用 `pick` 会吃掉村庄/遗迹份额。`worldCensus()` 样方 `SAMPLE_N=96` 只覆盖 4 格，「0 条废弃矿井」是正常采样。
+- 结构格 `CELL=96`，`structAt(gx,gz)` 一格一结构（`structShapeCache` 单值缓存）。矿井密度只调 `dims.js` 的 `STRUCT_FILL`/`MINE_EXTRA`/`MINE_PLAIN_TAIL`；份额用独立 hash `hash2(gx,gz,SEED+9013)` 且放在群系分支之前，复用 `pick` 会吃掉村庄/遗迹份额。`worldCensus()` 样方 `SAMPLE_N=96` 只覆盖 4 格，「0 条废弃矿井」是正常采样。
+
+## 性能（2026-11-16 优化，勿回退）
+- **线上卡顿先看 DevTools 脚本 vs 渲染占比**：本次是脚本 94%、渲染 2.8% → 瓶颈在主线程 JS，砍画质/视距没用。
+- `structAt` 已带 `Map` 记忆化（`structAtRaw` 是原函数体）；**缓存跟 `SEED`/`flatWorld` 换桶**，否则换种子后读到旧判定（症状：换种子地形结构没变）。上限 600 超限整表清。
+- `structAnchor` 只调 `structAt` **一次**（原来调两遍 = 最热路径成本翻倍）。
+- `buildChunk` 开头一次性采样 chunk+1 格边进 `Int16Array`，面剔除与 AO 全走数组下标。**1 格边够用**（AO 沿面切线最多偏移 1 格）；地形纯函数，采样一次与现算等价。
+- 脏区块重建按**时间预算** `loop.js` 的 `BUILD_BUDGET_MS=6`，不是区块个数（原来 4 个 = 56~290ms 一帧）。走一格脏 16 块，按 6ms/帧摊完。
+- 效果：单 chunk 72.6ms → 12.3ms；挖方块单帧 87ms → 11.7ms（11.5fps → 85fps）。**网格输出与优化前逐字节一致**（`proto.mjs` 逐顶点对拍）。
+- 别给 `getEffective` 加**全局**缓存：它读 `edits` 覆盖层是有状态的，会返回过期方块；区块局部缓存每次重建重新采样才安全。
+- 排除项（已评估，别再提）：降渲染倍率/关泛光/关 FXAA、缩短视距 `VIEW_CX/CZ`、Web Worker 化网格构建。见 `.scratch/perf/spec.md`。
 
 ## 生物（mobs.js）
 - **不设场上生物数量上限**（2026-11-15 删 `MOB_CAP=64` 及 summonGolem / boss 援军 / updateMobSpawn / 刷怪蛋 4 道闸）。别再加 `mobs.length>=N` 总闸——撞顶静默拒绝最难查。唯一节流是 `updateMobs` 48 格远距回收（傀儡/boss/附身目标除外）。保留 `player.dead` 门控、`GUARD_CAP=3`、`summonAdds.cap=4`，都不是总闸。挂机怪聚 48 格内会无限累积掉帧，属已接受取舍；兜底加回收别加闸。见 `.scratch/mob-cap/spec.md`。

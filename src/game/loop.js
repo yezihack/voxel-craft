@@ -29,6 +29,11 @@ import { ui } from './uiState.js'
 /* ============================== 主循环 ============================== */
 export let last = 0, fps = 0, fpsAcc = 0, fpsN = 0, frames = 0;
 
+/* 脏区块重建的时间预算（毫秒 / 帧）。
+ * 16.7ms 是 60fps 的整帧时长，把重建压到 6ms 是为了让剩下的时间
+ * 留给渲染与逻辑 —— 帧率优先于「边界立刻长齐」。 */
+export const BUILD_BUDGET_MS = 6;
+
 export function resize() {
   /* 触屏把渲染倍率压到 1.5：手机的 devicePixelRatio 常见是 3，
    * 按 2 倍算就是 2.2M 像素的 WebGL 画面，中端机会掉到 20 帧以下。
@@ -229,10 +234,21 @@ export function frame(now) {
     if (dgx || dgz) shiftChunks(dgx, dgz);
   }
 
-  // 1) 构建脏区块（每帧限制数量，避免卡顿）
-  let budget = 4;
+  // 1) 构建脏区块：按**时间**预算，而不是按区块个数。
+  /* ⚠ 原来固定「每帧最多 4 个区块」。但单个区块的重建要 14~70 ms，
+  *   4 个就是 56~290 ms —— 一次就能把帧率打到 3~18 fps，
+  *   玩家体感就是「走路撞格」「挖一下方块」猛地一卡。
+  *   改成时间预算后，每帧最多花 BUILD_BUDGET_MS，剩下的留到下一帧，
+  *   区块重建被摊平，玩家看到的是「边界慢慢补齐」而不是「突然卡死」。
+  *
+  *   走完一格会脏 16 个区块（4×4 窗口平移，新进视野的一圈），
+  *   按 6ms/帧摊完需要十几帧 —— 期间边界区块是旧的，但那是「视野边缘
+  *   暂时没长出来」，比整帧卡死好得多。 */
+  const buildStart = performance.now();
   for (const c of chunks) {
-    if (c.dirty && budget > 0) { uploadChunk(c, buildChunk(c)); budget--; }
+    if (!c.dirty) continue;
+    uploadChunk(c, buildChunk(c));
+    if (performance.now() - buildStart >= BUILD_BUDGET_MS) break;
   }
 
   // 2) 方块：先画全部不透明面，再画半透明面（玻璃/水/冰/岩浆）

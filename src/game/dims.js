@@ -1,6 +1,6 @@
 /* 维度档案：8 个维度的地形参数、方块读写、装饰与结构格 —— 迁移自 voxel-craft.html 第 1353-1861 行 */
 
-import { SEED, structShapeCache } from './state.js'
+import { SEED, flatWorld, structShapeCache } from './state.js'
 import { D, DIM_N, H, I, PORTAL_BLOCK, SEA } from './config.js'
 import { collectDesertTemple, collectIgloo, collectJungleTemple, collectMine, collectRuin, collectSnowVillage, collectVillage, lavaAt, oreVein } from './fluid.js'
 import { EKEY, isSolid } from './generate.js'
@@ -332,8 +332,39 @@ export const MINE_EXTRA = 0.10;
 export const MINE_PLAIN_TAIL = 0.76;
 
 /* 结构类型判定。所有约束（群系、高度、平整度）都写在里面，
- * 保证「同一个格子在任何时刻问都给出同一个答案」。 */
+ * 保证「同一个格子在任何时刻问都给出同一个答案」。
+ *
+ * ⚠ 这一层**必须**记忆化。性能剖析显示 structAnchor + structAt 合计占
+ *   网格构建 60% 的自耗时 —— 因为 getEffective 每次都会扫 3×3 结构格，
+ *   而 structAnchor 又把 structAt 调了两遍（判空一次、取 type 又一次），
+ *   每次 structAt 还要做一次「锚点周围 9 点高度极差」抽查（9 次 colHeight）。
+ *   structAt 是 (gx,gz) 的纯函数，而 4×4 区块窗口只覆盖 25 个结构格，
+ *   缓存命中率接近 100%，却一次都没命中过。
+ *
+ * ⚠ 缓存必须跟着 SEED / flatWorld 换桶：换种子后列高变了，
+ *   「泡在水里不建」的判定跟着变；换超平坦后列高也变了。
+ *   沿用旧桶会读到上一轮判定的结构类型 —— 症状是「换了种子地形结构没变」。 */
+const structTypeCache = new Map();
+let structTypeSeed = null, structTypeFlat = null;
+function ensureStructTypeCache() {
+  if (structTypeSeed !== SEED || structTypeFlat !== flatWorld) {
+    structTypeCache.clear();
+    structTypeSeed = SEED; structTypeFlat = flatWorld;
+  }
+}
 export function structAt(gx, gz) {
+  ensureStructTypeCache();
+  const key = gx + ',' + gz;
+  const hit = structTypeCache.get(key);
+  if (hit !== undefined) return hit;
+  const v = structAtRaw(gx, gz);
+  /* 上限与 structShapeCache 同量级。结构格密度低（96×96 一格），
+   * 整表清掉也很快回填，不需要 LRU。 */
+  if (structTypeCache.size > 600) structTypeCache.clear();
+  structTypeCache.set(key, v);
+  return v;
+}
+function structAtRaw(gx, gz) {
   const r = hash2(gx, gz, SEED + 9001);
   if (r > STRUCT_FILL) return 0;                                 // 其余格子没有结构
   const cx = gx * CELL + CELL / 2, cz = gz * CELL + CELL / 2;   // 锚点吸附格心
@@ -374,9 +405,12 @@ export const STRUCT_NAME = { 1: '废弃矿井', 2: '遗迹', 3: '村庄', 4: '�
 
 /* 结构锚点（世界坐标）。返回 null 表示这个格子不放结构。 */
 export function structAnchor(gx, gz) {
-  if (!structAt(gx, gz)) return null;
+  /* ⚠ structAt 只调**一次**：原来判空一次、取 type 又一次，
+   *   等于把最热的那条路径的成本翻倍。 */
+  const type = structAt(gx, gz);
+  if (!type) return null;
   const cx = gx * CELL + CELL / 2, cz = gz * CELL + CELL / 2;
-  return { gx, gz, type: structAt(gx, gz), x: cx, z: cz, info: colInfo(cx, cz) };
+  return { gx, gz, type, x: cx, z: cz, info: colInfo(cx, cz) };
 }
 
 /* 一栋建筑覆盖的方块，收集到 out.push([x, y, z, id])。
