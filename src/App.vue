@@ -13,6 +13,7 @@ import GameCanvas from './components/GameCanvas.vue'
 import HotBar from './components/HotBar.vue'
 import HurtFlash from './components/HurtFlash.vue'
 import IconDefs from './components/IconDefs.vue'
+import KeyHints from './components/KeyHints.vue'
 import NameTags from './components/NameTags.vue'
 import PotionHud from './components/PotionHud.vue'
 import StartVeil from './components/StartVeil.vue'
@@ -85,6 +86,7 @@ onMounted(async () => {
   <EnchantPanel />
   <ChestPanel />
   <DeathScreen />
+  <KeyHints />
   <Toast />
   <TouchControls />
   <StartVeil />

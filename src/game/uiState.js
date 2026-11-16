@@ -74,6 +74,19 @@ export const ui = reactive({
   toastText: '',
   toastOn: false,
 
+  /* ---- 快捷键说明面板 ----
+   * 进游戏时（设置里开着）在左上角弹一张按键表，H 键随时开关。
+   * 12 秒后自动收起 —— 它是「新手上路提醒」，不是常驻 HUD，
+   * 一直挂在左上角会挡住视野（游戏内不放常驻文字 HUD）。 */
+  keyHintsOn: false,
+  /* 开关刚被打开、还没兑现的那一次「进游戏就弹」。
+   * 为什么需要它：速查表只在**第一次**进游戏时自动弹（暂停后恢复、
+   * 关背包这些都走同一条 startGame，每次都弹就成了噪音）。
+   * 但玩家可能是在暂停面板里才把开关打开的 —— 那时游戏已经进过一次，
+   * 光靠「第一次」这个条件，他这一局就再也等不到那张表了。
+   * 这个标记把这个缺口补上：开关打开后，下一次 startGame 兑现一次。 */
+  keyHintsPending: false,
+
   /* ---- 其它 ---- */
   touch: false,                // 触屏环境（决定 body.touch 与触屏控件显示）
   fatal: null,                 // 致命错误（如不支持 WebGL）→ 整页提示
@@ -94,6 +107,53 @@ export function toast(msg, ms = 1800) {
   ui.toastOn = true
   clearTimeout(toastTimer)
   toastTimer = setTimeout(() => { ui.toastOn = false }, ms)
+}
+
+/* ---------------- 快捷键说明面板 ----------------
+ * 进游戏时在左上角弹一张按键速查表，H 键随时开关。
+ *
+ * 自动弹出的那张会自己在 12 秒后收起：它是「新手上路提醒」，
+ * 不是常驻 HUD —— 游戏内不放常驻文字 HUD，一直挂在左上角会挡视野。
+ * 手动按 H 弹出来的那张不自动收起，由玩家自己按 H 关掉。
+ *
+ * 定时器住在状态中心（和 toast 一样），组件只读 ui.keyHintsOn。 */
+export const KEY_HINTS_AUTO_HIDE_MS = 12000
+let keyHintsTimer = null
+
+export function showKeyHints(autoHide = false) {
+  clearTimeout(keyHintsTimer)
+  keyHintsTimer = null
+  ui.keyHintsOn = true
+  if (autoHide) {
+    keyHintsTimer = setTimeout(() => { ui.keyHintsOn = false }, KEY_HINTS_AUTO_HIDE_MS)
+  }
+}
+
+export function hideKeyHints() {
+  clearTimeout(keyHintsTimer)
+  keyHintsTimer = null
+  ui.keyHintsOn = false
+}
+
+/* H 键：开 → 关，关 → 开。开着时先关掉（清掉自动收起的定时器），
+ * 关着时弹一张不会自己消失的（玩家主动要看，就别抢他的时间）。 */
+export function toggleKeyHints() {
+  if (ui.keyHintsOn) hideKeyHints()
+  else showKeyHints(false)
+}
+
+/* 设置里的开关被打开时调用：把「下次进游戏就弹」这个承诺记下来。
+ * 这样即使玩家是在暂停面板里开的开关，下一次 startGame 也会兑现。 */
+export function requestKeyHints() {
+  ui.keyHintsPending = true
+}
+
+/* 设置里的开关被关掉时调用：既收掉当前这张表，也撤掉那个承诺。
+ * 「关闭」必须彻底 —— 留着 pending 的话，下次进游戏照样弹，
+ * 玩家会觉得开关没生效。 */
+export function cancelKeyHints() {
+  ui.keyHintsPending = false
+  hideKeyHints()
 }
 
 export function setFatal(msg) { ui.fatal = msg }

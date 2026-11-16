@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { engine, ui } from '../engine.js'
+import { engine, ui, settings, toggleSetting, requestKeyHints, cancelKeyHints } from '../engine.js'
 import { toast } from '../game/uiState.js'
 import { normalizeAlias } from '../game/aliasName.js'
 import { MODES } from '../data/modes.js'
@@ -195,6 +195,20 @@ function startNew() {
       && !window.confirm('删除当前存档并重新开始？这个操作无法撤销。')) return
   engine.newWorld()
 }
+
+/* 「进入游戏时显示快捷键说明」开关。
+ *
+ * 开关写进 settings（本地偏好），并立刻 saveSettings —— 不等进游戏，
+ * 免得玩家关掉之后马上开始游戏还是弹出来。
+ *
+ * 开：记一个 pending，下一次进游戏时兑现（哪怕这一局已经进过一次）。
+ * 关：既收掉当前这张表，也撤掉那个承诺 —— 「关闭」必须彻底，
+ * 留着 pending 的话下次进游戏照样弹，玩家会觉得开关没生效。 */
+function toggleShowKeyHints() {
+  toggleSetting('showKeyHints')
+  if (settings.showKeyHints) requestKeyHints()
+  else cancelKeyHints()
+}
 </script>
 
 <template>
@@ -247,6 +261,20 @@ function startNew() {
         <button class="savebtn" @click="engine.saveNow(true)">
           💾 保存进度
           <span class="savemeta">手动存一份，下次从这里继续</span>
+        </button>
+      </div>
+
+      <!-- 设置：本机显示偏好，不进存档也不上云端（手机要摇杆、桌面要键盘，
+       * 偏好跟着存档走是错的行为）。以后再加设置就往这一行里塞。 -->
+      <div class="setrow">
+        <span class="setlabel">⚙ 设置</span>
+        <button
+          class="setitem" :class="{ on: settings.showKeyHints }"
+          :aria-pressed="settings.showKeyHints ? 'true' : 'false'"
+          @click="toggleShowKeyHints"
+        >
+          <span class="switch"><span class="knob" /></span>
+          <span class="settext">进入游戏时在左上角显示快捷键说明</span>
         </button>
       </div>
 
@@ -486,6 +514,92 @@ function startNew() {
 
 .savenone kbd {
   margin: 0 2px
+}
+
+/* ---------- 设置行 ---------- */
+/* 设置项整体是「一行一条」，以后加设置就往 .setrow 里塞 .setitem。 */
+.setrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  text-align: left;
+}
+
+.setlabel {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--dim);
+  letter-spacing: .3px;
+}
+
+/* 整条都可点（不是只有那个小开关可点）—— 触屏上小开关太小不好按。 */
+.setitem {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 11px;
+  border-radius: 10px;
+  cursor: pointer;
+  border: 1.5px solid rgba(255, 255, 255, .10);
+  background: rgba(255, 255, 255, .03);
+  color: var(--dim);
+  font: inherit;
+  font-size: 11.5px;
+  transition: background .12s, border-color .12s;
+}
+
+.setitem:hover {
+  background: rgba(255, 255, 255, .07);
+  border-color: rgba(255, 255, 255, .22);
+}
+
+.setitem.on {
+  border-color: rgba(67, 224, 255, .38);
+  background: rgba(67, 224, 255, .07);
+  color: var(--txt);
+}
+
+.settext {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  line-height: 1.35;
+}
+
+/* 开关本体：一个 28×16 的小滑块，靠 .on 时把 knob 推到右边。 */
+.switch {
+  flex: 0 0 auto;
+  position: relative;
+  width: 30px;
+  height: 17px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .12);
+  border: 1px solid rgba(255, 255, 255, .16);
+  transition: background .16s, border-color .16s;
+}
+
+.setitem.on .switch {
+  background: linear-gradient(135deg, #43e0ff, #7dd3fc);
+  border-color: transparent;
+}
+
+.knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--txt);
+  transition: transform .16s;
+}
+
+.setitem.on .knob {
+  transform: translateX(13px);
+  background: #04121a;
 }
 
 /* ---------- 云端身份：状态 / 别名 / 存档码 ---------- */

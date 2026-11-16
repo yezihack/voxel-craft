@@ -22,6 +22,7 @@ import { arrows, despawnAllMobs, surfaceY } from './mobs.js'
 import { player } from './player.js'
 import { canvas } from './renderer.js'
 import { countEdits, deleteSave, hasSave, loadGame, saveGame, saveMeta } from './save.js'
+import { settings } from './settings.js'
 import { HOTBAR_N, SLOT_N, activeSlots, cancelDig, heldId, invAdd, invCount, invSlots, invTake, respawn } from './survival.js'
 import {
   MODE, SEED, bowCharge, breakHeld, dim, flatWorld, lookVec, mode, paused, placeHeld,
@@ -30,7 +31,7 @@ import {
   setPlaceRepeat, setRunning, setSelected, setSpectate, setStructShapeCache,
   spectate, stickVec,
 } from './state.js'
-import { toast, ui } from './uiState.js'
+import { toast, ui, showKeyHints } from './uiState.js'
 
 /* ---------------- 快捷栏 ---------------- */
 
@@ -202,12 +203,25 @@ export function startGame(wantLock = true) {
   if (ui.bagOpen) closeBag(true)
   if (ui.enchantOpen) closeEnchant(true)
   if (ui.chestOpen) closeChest(true)
+  /* 「第一次进入游戏」= ui.started 由 false 变 true 的那一刻。
+   * 只在这一次弹快捷键速查表：暂停后恢复、背包关掉这些都会再走一遍
+   * startGame，每次都弹一遍就成了噪音（想再看随时按 H）。
+   *
+   * ⚠ 但玩家可能是在暂停面板里才把开关打开的 —— 那时游戏已经进过一次，
+   * 只认「第一次」的话，他这一局就再也等不到那张表。所以还要看
+   * ui.keyHintsPending（开关打开时记下的承诺），兑现后清掉。
+   * 两个条件都要求 settings.showKeyHints 为真：关掉的开关必须彻底。 */
+  const firstEnter = !ui.started
   setRunning(true)
   setPaused(false)
   ui.started = true
   ui.veilVisible = false
   ui.deathVisible = false
   if (wantLock) requestLockSafe()
+  if (settings.showKeyHints && (firstEnter || ui.keyHintsPending)) {
+    showKeyHints(true)
+    ui.keyHintsPending = false
+  }
 }
 
 export function pauseGame() {

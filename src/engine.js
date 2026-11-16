@@ -12,6 +12,15 @@ import { setCanvas } from './game/canvasHost.js'
 export { setFatal, setTagHook, ui } from './game/uiState.js'
 import { ui as uiState } from './game/uiState.js'
 
+/* 快捷键速查表的动作也走静态导出：它是纯界面状态，不碰引擎，
+ * 而面板上的「×」按钮在引擎拉起之前就该能点。 */
+export { cancelKeyHints, hideKeyHints, requestKeyHints, showKeyHints, toggleKeyHints } from './game/uiState.js'
+
+/* settings.js 也走静态引入：它是纯本地偏好（读写 localStorage），
+ * 不碰 GL；而「设置」开关就在开始面板上，那块面板比引擎拉起得早 ——
+ * 走 engine 门面的话，点开关会撞上 NOT_READY_KEYS 的 noop 占位。 */
+export { settings, toggleSetting } from './game/settings.js'
+
 /* MODE 是编译期常量（state.js 是纯数据叶模块，不依赖 vue / DOM / GL），
  * 所以能静态引入。组件在首屏就要用它判模式，而那时引擎还没被动态拉起 ——
  * 走 engine.MODE 会在第一帧读到 undefined。 */

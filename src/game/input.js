@@ -8,7 +8,8 @@ import { camEye } from './loop.js'
 import { MOB_TYPES, raycastMob } from './mobs.js'
 import { player } from './player.js'
 import { cycleMode, loadNow, onEscape, saveNow, selectSlot, toggleBag } from './uiActions.js'
-import { toast } from './uiState.js'
+import { settings } from './settings.js'
+import { toast, toggleKeyHints } from './uiState.js'
 import { canvas } from './renderer.js'
 import { HOTBAR_N, respawn } from './survival.js'
 
@@ -84,6 +85,17 @@ window.addEventListener('keydown', (e) => {
    * 万一某个浏览器拦不住 F5，玩家仍有别的入口。 */
   if (k === 'F5') { e.preventDefault(); saveNow(true); }
   if (k === 'F9') { e.preventDefault(); loadNow(); }
+  /* H：显示 / 隐藏左上角的快捷键速查表。
+   * 只在真正在玩（running）时生效：开始面板上那个别名输入框也在 window 上收
+   * keydown，不挡一下的话，打「htop」会把速查表一并关掉。
+   *
+   * 设置里把「进入游戏时显示快捷键说明」关掉时，H 也不弹 —— 那个开关是
+   * 这一整块面板的总开关。静默无反应会让人以为键坏了，所以给一句提示，
+   * 告诉他去哪儿能打开。 */
+  if (k === 'KeyH' && running) {
+    if (settings.showKeyHints) toggleKeyHints();
+    else toast('快捷键说明已关闭，可在开始面板的「设置」里打开');
+  }
   /* Esc：先关面板（附魔台 → 背包），其余交给 pointerlockchange。
    * 统一走 uiActions.onEscape，别在这里再抄一遍判断 —— 抄一遍就会漏掉新面板。 */
   if (k === 'Escape') onEscape();
