@@ -20,6 +20,7 @@ import { enchantRestore, enchantSnapshot } from './enchant.js'
 import { dimEdits } from './generate.js'
 import { buildEditDelta } from './cloudDelta.js'
 import { isOwnerCode, normalizeAlias } from './aliasName.js'
+import { clearAliasState, writeAliasState } from './aliasState.js'
 import { chunks, initChunks } from './mesher.js'
 import { setWorldTime, worldTime } from './mobs.js'
 import { player } from './player.js'
@@ -162,6 +163,9 @@ export function deleteSave() {
   store.del(META_KEY)
   invalidateCloud()
   deleteCloudSave()                            // 异步删云端，失败静默
+  /* 档没了，本机别名档案指向的 owner 也就没有档可载了。
+   * 不清的话下次进游戏还会问「要不要加载这份存档」，点了却拉不到。 */
+  clearAliasState()
 }
 
 /* ---------------- 云同步（Cloudflare D1） ----------------
@@ -205,7 +209,12 @@ export function getOwner() {
 
 /* 认领另一台设备的存档码（第二阶段「跨设备取回」的入口）。
  * 只接受 UUID 形态的字符，防止把任意字符串当 owner 写进请求头；
- * 换身份必须清掉增量基线，否则下一笔 diff 会拿旧 owner 的世界状态去算。 */
+ * 换身份必须清掉增量基线，否则下一笔 diff 会拿旧 owner 的世界状态去算。
+ *
+ * ⚠ 换身份**不**清本机别名档案（aliasState）：那里面记的是「这台机器上
+ *   我自己设过的别名 + 它绑的 owner」，是玩家换回自己存档的钥匙。
+ *   认领别人的档只是临时借用身份，不该把这把钥匙丢掉。
+ *   真正该清的是展示缓存 cacheAlias —— 别把上一位 owner 的别名闪出来。 */
 export function setOwner(code) {
   const c = String(code || '').trim()
   if (!/^[A-Za-z0-9_-]{8,64}$/.test(c)) return false
@@ -332,7 +341,15 @@ export async function getAlias() {
 
 /* 绑定 / 改名。返回 {ok:true, alias} 或 {ok:false, reason:'taken'|'invalid'}；
  * 业务失败走 200 + body reason（不用 4xx，免得浏览器记控制台资源错误），
- * 所以这里必须把 body 交给 UI 解释，不能只看 r.ok。 */
+ * 所以这里必须把 body 交给 UI 解释，不能只看 r.ok。
+ *
+ * ⚠ 绑定成功后顺手写一份**本机别名档案**（别名 + 它绑的 owner）。
+ *   这是「换设备后还能找回」的另一半：D1 只存 alias→owner 的映射，
+ *   玩家在 A 设备设了别名「小明」，B 设备上没有任何记录 —— 得靠玩家
+ *   记得名字再手动认领。把 owner 也记在本机，B 设备就能主动问
+ *   「要不要加载这份存档」，而不是等玩家自己想起来。
+ *   这里是唯一的别名写入入口（弹窗与 StartVeil 面板都走它），
+ *   放在这里就不会漏。 */
 export async function setAlias(name) {
   if (typeof fetch === 'undefined') return null
   try {
@@ -343,7 +360,11 @@ export async function setAlias(name) {
     })
     if (!r.ok) return null
     const d = await r.json()
-    if (d && d.ok) cacheAlias(String(d.alias || ''))
+    if (d && d.ok) {
+      const alias = String(d.alias || '')
+      cacheAlias(alias)
+      writeAliasState(alias, getOwner())
+    }
     return d
   } catch { return null }
 }

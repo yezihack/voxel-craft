@@ -1,6 +1,7 @@
 <script setup>
 import { nextTick, onMounted, ref } from 'vue'
 import { engine, initEngine, setFatal, ui } from './engine.js'
+import AliasResume from './components/AliasResume.vue'
 import BagPanel from './components/BagPanel.vue'
 import BowBar from './components/BowBar.vue'
 import ChestPanel from './components/ChestPanel.vue'
@@ -89,6 +90,10 @@ onMounted(async () => {
   <KeyHints />
   <Toast />
   <TouchControls />
+  <!-- ⚠ AliasResume 必须排在 StartVeil **之前**：它的 setup 里会写
+       StartVeil 的行内引导标记（压掉那边的重复提示），而 StartVeil 只在
+       自己的 setup 里读一次那个标记 —— 顺序反了就压不住。 -->
+  <AliasResume />
   <StartVeil />
   <FatalNotice v-if="ui.fatal" :msg="ui.fatal" />
 </template>
