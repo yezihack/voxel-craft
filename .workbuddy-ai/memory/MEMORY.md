@@ -71,3 +71,6 @@
 4. 追加 `.workbuddy-ai/memory/YYYY-MM-DD.md`；`git add` 自己改的文件后 commit（中文祈使句概括根因+新增）；工作区常有并行会话，**别 `git add -A`**。
 5. 同一文件叠两条功能线：`git show HEAD:<file>` 取 blob → 脚本按唯一锚点只施加本线 hunk → `git hash-object -w` + `git update-index --cacheinfo` 写暂存区，工作区保持原样。
 6. 无头测试细则（dev server 重启、地形就绪判据、线上探针只能纯 DOM 点击、Playwright ESM/Chrome 路径、两页并行 WebGL 不渲染）见 `REFERENCE.md`。
+7. **部署 CF 用干净 worktree，别用主仓库工作区**：`git worktree add --detach <tmp> HEAD` → PowerShell `New-Item -ItemType Junction -Path <tmp>\node_modules -Target <主仓库>\node_modules` → 在 worktree 里 `npx vite build` + `CI=1 npx wrangler@3 pages deploy dist --project-name voxel-craft --branch=main` → `git worktree remove --force <tmp>`。理由：工作区常有**并行会话的未完成改动**（坏的 `vite.config.js`、没部署的 DO、新模块），用它构建会失败或把半成品上线。部署的是 **HEAD**，不是工作区。
+8. **别用 grep 查 minified bundle**：超长单行会让 grep 按二进制处理而**漏报**中文串（实测 `grep -c "继续上次存档"` 返回 0，实际存在）。用 `node -e` 读文件 `String.includes()`。
+9. **线上 longtask 数不可信**：同一部署两次跑 `online-frames.mjs` 可能一次 0 个一次 2 个（swiftshader 软渲染噪声）。判定回归必须做**同机 A/B**：两个版本各起 `vite preview`、交替顺序跑多轮比分布，别比单次数值。
